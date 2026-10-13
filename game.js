@@ -495,6 +495,14 @@
       c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
     },
 
+    // Safari salah menghitung textAlign "center" untuk teks ber-emoji,
+    // jadi posisikan manual dari lebar hasil measureText.
+    centerText(text, x, y) {
+      const c = this.ctx;
+      c.textAlign = "left";
+      c.fillText(text, x - c.measureText(text).width / 2, y);
+    },
+
     draw() {
       const c = this.ctx, W = this.W, H = this.H;
       if (!W) return;
@@ -528,8 +536,8 @@
         }
         c.fillStyle = it.type === "power" ? "#3a1d00" : "#ffffff";
         c.font = `800 ${it.fontSize}px Nunito, sans-serif`;
-        c.textAlign = "center"; c.textBaseline = "middle";
-        c.fillText(it.label, x, it.y + 1);
+        c.textBaseline = "middle";
+        this.centerText(it.label, x, it.y + 1);
       });
 
       // pemain (kotak suara)
@@ -547,8 +555,8 @@
         this.roundRect(-p.w / 2, -p.h / 2, p.w, p.h, 10); c.fill();
         c.shadowBlur = 0;
         c.fillStyle = "rgba(0,0,0,.35)"; this.roundRect(-p.w / 4, -p.h / 2 + 4, p.w / 2, 5, 2); c.fill();
-        c.font = "16px sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
-        c.fillText("⚖️", 0, 4);
+        c.font = "16px sans-serif"; c.textBaseline = "middle";
+        this.centerText("⚖️", 0, 4);
         c.restore();
       }
 
