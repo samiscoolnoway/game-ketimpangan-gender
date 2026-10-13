@@ -374,10 +374,10 @@
       const level = 1 + this.elapsed / 15;
       const r = Math.random();
       let type, label;
-      const badP = Math.min(0.32, 0.22 + this.elapsed / 300) * (this.rush > 0 ? 0.6 : 1);
+      const badP = Math.min(0.32, 0.22 + this.elapsed / 300);
       if (r < 0.06) { type = "power"; label = Math.random() < .5 ? SHIELD_LABEL : "⏰ +5 detik"; }
-      else if (r < 0.13) { type = "gold"; label = pick(GOLD_ITEMS); }
-      else if (r < 0.13 + badP) { type = "bad"; label = pick(BAD_ITEMS); }
+      else if (r < 0.10) { type = "gold"; label = pick(GOLD_ITEMS); }
+      else if (r < 0.10 + badP) { type = "bad"; label = pick(BAD_ITEMS); }
       else { type = "good"; label = pick(GOOD_ITEMS); }
       const fontSize = this.W < 420 ? 13 : 15;
       this.ctx.font = `800 ${fontSize}px Nunito, sans-serif`;
@@ -386,14 +386,15 @@
       // cari posisi x yang tidak menumpuk dengan item yang baru muncul
       let x = 0;
       for (let tries = 0; tries < 8; tries++) {
-        x = rand(w / 2 + 6, Math.max(w / 2 + 7, this.W - w / 2 - 6));
+        const m = w / 2 + (type === "gold" ? 22 : 6);
+        x = rand(m, Math.max(m + 1, this.W - m));
         const clash = this.items.some((o) => o.y < h * 3 && Math.abs(o.x - x) < (o.w + w) / 2 + 8);
         if (!clash) break;
       }
       this.items.push({
         type, label, w, h, fontSize,
         x, y: -h,
-        vy: rand(90, 140) * (0.85 + level * 0.18) * (type === "bad" ? 1.05 : type === "gold" ? 0.9 : 1) * (this.rush > 0 ? 1.45 : 1),
+        vy: rand(90, 140) * (0.85 + level * 0.18) * (type === "bad" ? 1.05 : type === "gold" ? 1.25 : 1) * (this.rush > 0 ? 1.45 : 1),
         wob: rand(0, Math.PI * 2)
       });
     },
@@ -438,7 +439,7 @@
         const it = this.items[i];
         it.y += it.vy * dt;
         it.wob += dt * 3;
-        const ix = it.x + Math.sin(it.wob) * 6;
+        const ix = this.wobX(it);
         const hit = Math.abs(ix - p.x) < (it.w / 2 + p.w / 2 - 14) && Math.abs(it.y - p.y) < (it.h / 2 + p.h / 2 - 6);
         if (hit) { this.collect(it, ix); this.items.splice(i, 1); continue; }
         if (it.y - it.h > this.H) {
@@ -496,6 +497,14 @@
         else if (++this.gold >= RUSH_NEED) this.startRush();
         else toast(`✨ Pesan Emas ${this.gold}/${RUSH_NEED}`);
       } else if (it.type === "bad") {
+        if (this.rush > 0) { // Golden Rush: kebal, stereotip dibakar
+          const pts = 10 * 2;
+          this.score += pts;
+          this.burst(x, it.y, ["#ff3d1f", "#ff8a00", "#ffd23f"]);
+          this.float(x, it.y, "Dibakar! +" + pts, "#ff8a00");
+          sfx.mid();
+          return;
+        }
         if (this.shield > 0) {
           this.score += 5;
           this.burst(x, it.y, ["#ffd23f", "#ffffff"]);
@@ -505,6 +514,7 @@
         }
         this.lives--;
         this.streak = 0; this.combo = 1;
+        if (this.gold > 0) this.gold--; // satu segmen meteran Golden Rush hilang
         this.burst(x, it.y, ["#ff5c6c", "#ff9f1c"]);
         this.float(x, it.y, "−1 💔", "#ff5c6c");
         sfx.bad();
@@ -518,6 +528,9 @@
         this.burst(x, it.y, ["#ffd23f", "#9b5cff", "#ffffff"]);
       }
     },
+    // pesan emas bergoyang lebih lebar agar lebih sulit ditangkap
+    wobX(it) { return it.x + Math.sin(it.wob) * (it.type === "gold" ? 22 : 6); },
+
     startRush() {
       this.gold = 0;
       this.rush = RUSH_TIME;
@@ -525,7 +538,7 @@
       this.shake = 0.25;
       $(".canvas-wrap").classList.add("rush");
       sfx.rush();
-      toast("🔥 GOLDEN RUSH! Skor x2");
+      toast("🔥 GOLDEN RUSH! Skor x2 & kebal!");
     },
     endRush() {
       this.rush = 0;
@@ -601,7 +614,7 @@
 
       // item
       this.items.forEach((it) => {
-        const x = it.x + Math.sin(it.wob) * 6;
+        const x = this.wobX(it);
         const colors = it.type === "good" ? ["#2ee6c5", "#1a9e8a"] : it.type === "bad" ? ["#ff5c6c", "#b3263a"]
           : it.type === "gold" ? ["#fff1a8", "#e8a000"] : ["#ffd23f", "#ff9f1c"];
         c.shadowColor = it.type === "gold" ? "#ffd23f" : colors[0];
