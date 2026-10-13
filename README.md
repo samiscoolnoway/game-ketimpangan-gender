@@ -8,7 +8,7 @@ Dibuat dengan HTML, CSS, dan JavaScript murni: tanpa server, tanpa instalasi, da
 | Mode | Isi |
 |---|---|
 | 📖 **Mode Cerita** | 10 situasi nyata di sekolah (piket, ketua kelas, ekskul, pelecehan verbal, meme di grup, cita-cita, dll). Setiap pilihan mengubah **Indeks Kesetaraan Sekolah** dan disertai fakta edukatif. |
-| 🌟 **Mode Arcade** | Gerakkan kotak ⚖️ untuk menangkap nilai kesetaraan (hijau) dan menghindari gelembung stereotip (merah). Ada combo, perisai 🔒, bonus waktu ⏰, dan **Golden Rush** 🔥: kumpulkan 4 pesan emas (langka dan bergoyang lincah) untuk masuk mode cepat dengan skor x2 dan kebal terhadap stereotip. |
+| 🌟 **Mode Arcade** | Gerakkan kotak ⚖️ untuk menangkap nilai kesetaraan (hijau) dan menghindari gelembung stereotip (merah). Ada combo, perisai 🔒, bonus waktu ⏰, dan **Golden Rush** 🔥: kumpulkan 4 pesan emas (langka dan bergoyang lincah) untuk masuk mode cepat dengan skor x2 dan kebal terhadap stereotip (plus kebal 3 detik setelahnya). Di latar, seorang anak perempuan tumbuh dari TK sampai bekerja dan makin banyak orang yang menyemangatinya; kena stereotip, ia sedih dan kembali ke TK. Pesan yang bertabrakan saling terpental. |
 
 Fitur lain: papan skor (lokal atau global), tombol bagikan ke WA/IG, efek suara, musik latar orisinal untuk lobi, Mode Cerita, dan Mode Arcade (dibuat langsung dengan Web Audio, tanpa file lagu), confetti, dan tampilan ramah HP.
 

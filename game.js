@@ -178,6 +178,7 @@
       beep(180, .6, "sawtooth", .1, 900);
       [523, 659, 784, 1046, 1318, 1568].forEach((f, i) => setTimeout(() => beep(f, .16, "square", .07), 250 + i * 70));
     },
+    knock: () => { beep(170, .12, "square", .07, -110); setTimeout(() => beep(1250, .05, "triangle", .05), 15); },
     rushEnd: () => beep(700, .4, "triangle", .1, -400),
     win: () => { [523, 659, 784, 1046, 1318].forEach((f, i) => setTimeout(() => beep(f, .18, "triangle", .12), i * 110)); }
   };
@@ -465,6 +466,379 @@
   };
 
   /* =========================================================
+     PERJALANAN (latar Mode Arcade)
+     Seorang anak perempuan tumbuh dari TK sampai bekerja saat kamu terus
+     menangkap nilai kesetaraan. Tiap jenjang menambah satu pendukung yang
+     menyemangatinya. Kena stereotip: ia sedih dan mundur lagi ke TK.
+     ========================================================= */
+  const STAGES = [
+    { name: "TK", icon: "🧸", need: 3, h: 0.22, head: 0.17, shirt: "#ff9ec7", skirt: "#ff6fae", hair: "pigtails", sock: "#ffffff", shoe: "#d94f8a", bag: "#ffd23f" },
+    { name: "SD", icon: "🎒", need: 4, h: 0.26, head: 0.15, shirt: "#ffffff", skirt: "#d62839", hair: "pigtails", tie: "#d62839", sock: "#ffffff", shoe: "#222222", bag: "#26a6ff" },
+    { name: "SMP", icon: "📘", need: 5, h: 0.30, head: 0.14, shirt: "#ffffff", skirt: "#1d3e8a", hair: "ponytail", tie: "#1d3e8a", sock: "#ffffff", shoe: "#222222" },
+    { name: "SMA", icon: "📚", need: 6, h: 0.33, head: 0.13, shirt: "#ffffff", skirt: "#8d99ae", hair: "ponytail", tie: "#8d99ae", sock: "#ffffff", shoe: "#222222", hold: "book" },
+    { name: "Kuliah", icon: "🎓", need: 7, h: 0.35, head: 0.125, shirt: "#ffffff", skirt: "#3a3a5a", jacket: "#f4b400", hair: "long", shoe: "#333333", hold: "book" },
+    { name: "Kerja", icon: "💼", need: 0, h: 0.36, head: 0.12, shirt: "#e8f1ff", skirt: "#2b2d42", jacket: "#2b2d42", hair: "bun", lanyard: true, shoe: "#111111", hold: "case" }
+  ];
+  // Pendukung ke-i bergabung saat ia naik ke jenjang i+1.
+  const SUPPORTERS = [
+    { role: "Ibu", body: "#ff8fab", skin: "#e0ac69", hair: "#3b2416", long: true, h: 0.25, hello: "Ibu bangga!" },
+    { role: "Guru", body: "#4cc9f0", skin: "#c68642", hair: "#1b1b1b", glasses: true, h: 0.27, hello: "Terus belajar!" },
+    { role: "Sahabat", body: "#80ed99", skin: "#ffdbac", hair: "#5a3825", h: 0.23, hello: "Ayo bareng!" },
+    { role: "Ayah", body: "#ffb703", skin: "#8d5524", hair: "#111111", h: 0.28, hello: "Kejar mimpimu!" },
+    { role: "Mentor", body: "#c77dff", skin: "#f1c27d", hair: "#6b4226", long: true, glasses: true, h: 0.27, hello: "Kamu siap!" }
+  ];
+  const CHEERS = ["Semangat!", "Kamu bisa!", "Ayo terus!", "Hebat!", "Jangan menyerah!", "Keren!"];
+  const SLOTS = [-1.1, 1.1, -2.0, 2.0, -2.9];
+
+  const Journey = {
+    stage: 0, prog: 0, shown: 0, stepT: 0, size: 0,
+    sadT: 0, cheerT: 0, popT: 0, t: 0, bubbleT: 2, bubble: null, sparks: [], crew: [],
+
+    reset() {
+      this.stage = 0; this.prog = 0; this.shown = 0; this.stepT = 0; this.size = 0;
+      this.sadT = 0; this.cheerT = 0; this.popT = 0; this.bubbleT = 2; this.bubble = null; this.sparks = [];
+      this.crew = SUPPORTERS.map((s, i) => ({ ...s, a: 0, phase: i * 1.7 }));
+    },
+
+    gain(n) {
+      this.cheerT = 0.9;
+      if (this.sadT > 0.6) this.sadT = 0.6; // tangkapan baik menghiburnya
+      if (this.stage >= STAGES.length - 1) return;
+      this.prog += n;
+      while (this.stage < STAGES.length - 1 && this.prog >= STAGES[this.stage].need) {
+        this.prog -= STAGES[this.stage].need;
+        this.stage++;
+        const st = STAGES[this.stage];
+        toast(`${st.icon} Naik ke ${st.name}!`);
+        sfx.power();
+      }
+      if (this.stage === STAGES.length - 1) this.prog = 0;
+    },
+
+    fail() {
+      this.sadT = 2.4;
+      this.cheerT = 0;
+      this.bubble = null;
+      if (this.stage === 0 && this.shown === 0) return;
+      this.stage = 0; this.prog = 0;
+      this.stepT = 0.35; // jeda sebelum mulai mundur jenjang
+    },
+
+    update(dt, H) {
+      this.t += dt;
+      if (this.sadT > 0) this.sadT -= dt;
+      if (this.cheerT > 0) this.cheerT -= dt;
+      if (this.popT > 0) this.popT = Math.max(0, this.popT - dt * 1.4);
+
+      // tampilan jenjang menyusul logika: naik langsung (dengan efek), turun satu per satu
+      if (this.shown < this.stage) { this.shown = this.stage; this.evolveFx(); }
+      else if (this.shown > this.stage) {
+        this.stepT -= dt;
+        if (this.stepT <= 0) { this.shown--; this.stepT = 0.22; this.poofFx(); }
+      }
+      const target = STAGES[this.shown].h * H;
+      this.size = this.size ? this.size + (target - this.size) * Math.min(1, dt * 6) : target;
+
+      this.crew.forEach((s, i) => {
+        const want = i < this.shown ? 1 : 0;
+        const prev = s.a;
+        s.a += (want - s.a) * Math.min(1, dt * (want ? 3 : 5));
+        if (want && prev < 0.05 && s.a >= 0.05) this.bubble = { i, text: s.hello, life: 1.8 };
+      });
+
+      if (this.bubble) { this.bubble.life -= dt; if (this.bubble.life <= 0) this.bubble = null; }
+      this.bubbleT -= dt;
+      if (this.bubbleT <= 0 && !this.bubble && this.shown > 0 && this.sadT <= 0) {
+        this.bubble = { i: Math.floor(Math.random() * this.shown), text: pick(CHEERS), life: 1.6 };
+        this.bubbleT = rand(2.2, 3.5);
+      }
+
+      for (let i = this.sparks.length - 1; i >= 0; i--) {
+        const q = this.sparks[i];
+        q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 120 * dt; q.life -= dt;
+        if (q.life <= 0) this.sparks.splice(i, 1);
+      }
+    },
+
+    evolveFx() {
+      this.popT = 1;
+      for (let i = 0; i < 26; i++) {
+        const a = rand(0, Math.PI * 2), s = rand(40, 160);
+        this.sparks.push({ x: 0, y: -this.size * 0.5, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 60, life: rand(.5, 1), c: pick(["#ffd23f", "#2ee6c5", "#ffffff", "#ff9ec7"]) });
+      }
+    },
+    poofFx() {
+      for (let i = 0; i < 10; i++) {
+        const a = rand(0, Math.PI * 2), s = rand(20, 70);
+        this.sparks.push({ x: rand(-20, 20), y: -this.size * 0.4, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(.3, .6), c: "#9fb3c8" });
+      }
+    },
+
+    /* ---------- gambar ---------- */
+    draw(c, W, H) {
+      const cx = W / 2, gy = H - 84, t = this.t; // berdiri di atas jalur kotak pemain
+      if (!this.size) this.size = STAGES[this.shown].h * H;
+      const sad = this.sadT > 0, cheer = this.cheerT > 0 && !sad;
+      this.drawScenery(c, W, H);
+
+      // panggung tempat ia berdiri
+      c.fillStyle = "rgba(255,255,255,.07)"; Arcade.roundRect(cx - W * 0.42, gy - 2, W * 0.84, 6, 3); c.fill();
+
+      c.save();
+      c.globalAlpha = 0.5;
+      // pendukung
+      const gap = Math.min(W * 0.14, 80);
+      this.crew.forEach((s, i) => {
+        if (s.a < 0.01) return;
+        const leaving = i >= this.shown;
+        const sc = leaving ? s.a : 1 + Math.sin(Math.min(1, s.a) * Math.PI) * 0.25 * (1 - s.a);
+        const x = cx + SLOTS[i] * gap;
+        c.save();
+        c.globalAlpha = 0.5 * Math.min(1, s.a);
+        c.translate(x, gy + (leaving ? (1 - s.a) * 30 : 0));
+        c.scale(sc, sc);
+        this.drawPerson(c, s, s.h * H, t, (cheer || this.popT > 0) && !leaving, sad);
+        c.restore();
+      });
+
+      // kilau saat naik jenjang
+      if (this.popT > 0) {
+        const rg = c.createRadialGradient(cx, gy - this.size * 0.5, 0, cx, gy - this.size * 0.5, this.size * 0.9);
+        rg.addColorStop(0, `rgba(255,240,170,${0.7 * this.popT})`); rg.addColorStop(1, "rgba(255,240,170,0)");
+        c.fillStyle = rg; c.fillRect(cx - this.size, gy - this.size * 1.5, this.size * 2, this.size * 1.6);
+      }
+
+      // tokoh utama
+      c.save();
+      c.translate(cx, gy);
+      const pop = 1 + Math.sin(this.popT * Math.PI) * 0.12;
+      c.scale(pop, pop);
+      this.drawGirl(c, STAGES[this.shown], this.size, t, cheer, sad);
+      c.restore();
+      c.restore();
+
+      // partikel latar
+      this.sparks.forEach((q) => {
+        c.globalAlpha = Math.max(0, Math.min(1, q.life * 1.5)) * 0.8; c.fillStyle = q.c;
+        c.beginPath(); c.arc(cx + q.x, gy + q.y, 2.5, 0, Math.PI * 2); c.fill();
+      });
+      c.globalAlpha = 1;
+
+      // gelembung semangat
+      if (this.bubble && this.crew[this.bubble.i]) {
+        const s = this.crew[this.bubble.i];
+        const x = cx + SLOTS[this.bubble.i] * gap, y = gy - s.h * H - 16;
+        c.globalAlpha = Math.min(1, this.bubble.life * 3) * 0.9;
+        c.font = "800 12px Nunito, sans-serif";
+        const tw = c.measureText(this.bubble.text).width + 16;
+        const bx = Math.max(4, Math.min(W - tw - 4, x - tw / 2));
+        c.fillStyle = "#ffffff";
+        Arcade.roundRect(bx, y - 22, tw, 22, 11); c.fill();
+        c.beginPath(); c.moveTo(x - 5, y - 1); c.lineTo(x, y + 6); c.lineTo(x + 5, y - 1); c.fill();
+        c.fillStyle = "#3a1d6e"; c.textBaseline = "middle";
+        Arcade.centerText(this.bubble.text, bx + tw / 2, y - 11);
+        c.globalAlpha = 1;
+      }
+
+      // teks sedih
+      if (sad && this.sadT > 1) {
+        c.globalAlpha = Math.min(1, (this.sadT - 1) * 2) * 0.85;
+        c.font = "800 13px Nunito, sans-serif"; c.fillStyle = "#cfe3ff"; c.textBaseline = "middle";
+        Arcade.centerText("Yah... kembali ke TK", cx, gy - this.size - 34);
+        c.globalAlpha = 1;
+      }
+
+      this.drawBadge(c);
+    },
+
+    drawBadge(c) {
+      const st = STAGES[this.shown];
+      const last = this.stage >= STAGES.length - 1;
+      c.save();
+      c.globalAlpha = 0.92;
+      c.font = "800 13px Nunito, sans-serif";
+      const label = `${st.icon} ${st.name}`;
+      const dotsX = 18 + c.measureText(label).width + 10, bw = dotsX + STAGES.length * 7 + 6;
+      c.fillStyle = "rgba(0,0,0,.35)";
+      Arcade.roundRect(10, 10, bw, 38, 12); c.fill();
+      c.fillStyle = "#ffffff"; c.textBaseline = "middle"; c.textAlign = "left";
+      c.fillText(label, 18, 22);
+      // titik jenjang
+      for (let i = 0; i < STAGES.length; i++) {
+        c.fillStyle = i <= this.shown ? "#ffd23f" : "rgba(255,255,255,.25)";
+        c.beginPath(); c.arc(dotsX + 3 + i * 7, 22, 2.6, 0, Math.PI * 2); c.fill();
+      }
+      // progres ke jenjang berikutnya
+      const pw = bw - 16;
+      c.fillStyle = "rgba(255,255,255,.2)"; Arcade.roundRect(18, 36, pw, 5, 2.5); c.fill();
+      const f = last ? 1 : this.prog / STAGES[this.stage].need;
+      if (f > 0) { c.fillStyle = last ? "#ffd23f" : "#2ee6c5"; Arcade.roundRect(18, 36, pw * f, 5, 2.5); c.fill(); }
+      c.restore();
+    },
+
+    drawScenery(c, W, H) {
+      const s = this.shown;
+      c.save();
+      c.fillStyle = "rgba(255,255,255,.06)";
+      if (s === 0) {
+        // rumah & taman bermain
+        for (let i = 0; i < 4; i++) {
+          const x = i * W / 4 + 14, w = W / 4 - 28, top = H - 52;
+          c.fillRect(x, top, w, 60);
+          c.beginPath(); c.moveTo(x - 6, top); c.lineTo(x + w / 2, top - 22); c.lineTo(x + w + 6, top); c.fill();
+        }
+      } else if (s <= 3) {
+        // sekolah dengan tiang bendera
+        const bw = W * 0.7, x = (W - bw) / 2, top = H - 70 - s * 12;
+        c.fillRect(x, top, bw, 90);
+        c.beginPath(); c.moveTo(x - 10, top); c.lineTo(W / 2, top - 26); c.lineTo(x + bw + 10, top); c.fill();
+        c.fillRect(x - 30, top - 50, 3, 140);
+        c.fillStyle = "rgba(214,40,57,.35)"; c.fillRect(x - 27, top - 50, 22, 7);
+        c.fillStyle = "rgba(255,255,255,.3)"; c.fillRect(x - 27, top - 43, 22, 7);
+      } else if (s === 4) {
+        // kampus berpilar
+        const bw = W * 0.8, x = (W - bw) / 2, top = H - 130;
+        c.fillRect(x, top + 16, bw, 140);
+        c.beginPath(); c.moveTo(x - 8, top + 16); c.lineTo(W / 2, top - 22); c.lineTo(x + bw + 8, top + 16); c.fill();
+        c.fillStyle = "rgba(255,255,255,.05)";
+        for (let i = 0; i < 7; i++) c.fillRect(x + 12 + i * (bw - 24) / 6.5, top + 26, 8, 120);
+      } else {
+        // gedung kantor
+        for (let i = 0; i < 5; i++) {
+          const bw = W / 5, x = i * bw + 6, hh = 120 + ((i * 47) % 90);
+          c.fillStyle = "rgba(255,255,255,.06)"; c.fillRect(x, H - hh, bw - 12, hh);
+          c.fillStyle = "rgba(255,230,150,.08)";
+          for (let r = 0; r < hh / 18 - 1; r++) for (let k = 0; k < 3; k++) c.fillRect(x + 6 + k * (bw - 24) / 3, H - hh + 8 + r * 18, 6, 8);
+        }
+      }
+      c.restore();
+    },
+
+    limb(c, x1, y1, x2, y2, w, color) {
+      c.strokeStyle = color; c.lineWidth = w; c.lineCap = "round";
+      c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
+    },
+
+    // Origin di kaki (0,0), y ke atas negatif.
+    drawGirl(c, st, s, t, cheer, sad) {
+      const skin = "#f3c9a0", hair = "#3b2416";
+      const bob = cheer ? -Math.abs(Math.sin(t * 9)) * s * 0.06 : Math.sin(t * 2) * s * 0.008;
+      const r = st.head * s;
+      const hipY = -s * 0.36 + bob, waistY = -s * 0.48 + bob, shY = -s * 0.70 + bob;
+      const hx = 0, hy = shY - r * 0.92 + (sad ? r * 0.12 : 0);
+      const bw = s * 0.24;
+
+      // rambut belakang
+      c.fillStyle = hair;
+      if (st.hair === "long") { Arcade.roundRect(hx - r * 1.05, hy - r * 0.2, r * 2.1, r * 2.3, r * 0.6); c.fill(); }
+      if (st.hair === "ponytail") {
+        const sw = Math.sin(t * 3) * r * 0.15;
+        c.beginPath(); c.ellipse(hx + r * 0.95 + sw, hy + r * 0.3, r * 0.35, r * 0.8, 0.3, 0, Math.PI * 2); c.fill();
+      }
+      if (st.hair === "pigtails") {
+        [-1, 1].forEach((d) => { c.beginPath(); c.ellipse(hx + d * r * 1.1, hy + r * 0.25 + Math.sin(t * 4 + d) * r * 0.05, r * 0.32, r * 0.5, d * 0.3, 0, Math.PI * 2); c.fill(); });
+      }
+      if (st.hair === "bun") { c.beginPath(); c.arc(hx, hy - r * 1.05, r * 0.38, 0, Math.PI * 2); c.fill(); }
+
+      // tas punggung
+      if (st.bag) { c.fillStyle = st.bag; Arcade.roundRect(-bw * 0.75, shY + s * 0.02, bw * 1.5, s * 0.2, s * 0.04); c.fill(); }
+
+      // kaki
+      [-1, 1].forEach((d) => {
+        this.limb(c, d * s * 0.05, hipY, d * s * 0.05, -s * 0.03, s * 0.055, skin);
+        if (st.sock) this.limb(c, d * s * 0.05, -s * 0.12, d * s * 0.05, -s * 0.03, s * 0.058, st.sock);
+        c.fillStyle = st.shoe; c.beginPath(); c.ellipse(d * s * 0.06, -s * 0.015, s * 0.05, s * 0.025, 0, 0, Math.PI * 2); c.fill();
+      });
+
+      // rok
+      const pencil = st.name === "Kerja";
+      const skB = hipY + s * 0.05, topW = bw * 0.9, botW = pencil ? bw * 0.95 : bw * 1.4;
+      c.fillStyle = st.skirt;
+      c.beginPath(); c.moveTo(-topW / 2, waistY); c.lineTo(topW / 2, waistY); c.lineTo(botW / 2, skB); c.lineTo(-botW / 2, skB); c.closePath(); c.fill();
+
+      // badan
+      c.fillStyle = st.shirt; Arcade.roundRect(-bw / 2, shY, bw, waistY - shY + 2, s * 0.04); c.fill();
+      if (st.tie) { c.fillStyle = st.tie; c.beginPath(); c.moveTo(-s * 0.02, shY + 2); c.lineTo(s * 0.02, shY + 2); c.lineTo(0, shY + s * 0.12); c.closePath(); c.fill(); }
+      if (st.jacket) {
+        c.fillStyle = st.jacket;
+        Arcade.roundRect(-bw / 2 - 1, shY, bw * 0.34, waistY - shY + s * 0.03, s * 0.03); c.fill();
+        Arcade.roundRect(bw / 2 - bw * 0.34 + 1, shY, bw * 0.34, waistY - shY + s * 0.03, s * 0.03); c.fill();
+      }
+      if (st.bag) { c.strokeStyle = st.bag; c.lineWidth = s * 0.02; [-1, 1].forEach((d) => { c.beginPath(); c.moveTo(d * bw * 0.3, shY); c.lineTo(d * bw * 0.25, waistY); c.stroke(); }); }
+      if (st.lanyard) {
+        c.strokeStyle = "#26a6ff"; c.lineWidth = s * 0.012;
+        c.beginPath(); c.moveTo(-s * 0.04, shY); c.lineTo(0, shY + s * 0.1); c.lineTo(s * 0.04, shY); c.stroke();
+        c.fillStyle = "#ffffff"; c.fillRect(-s * 0.025, shY + s * 0.1, s * 0.05, s * 0.06);
+      }
+
+      // lengan
+      const sleeve = st.jacket || st.shirt, armL = s * 0.27;
+      [-1, 1].forEach((d) => {
+        let a;
+        if (cheer) a = 2.5 + Math.sin(t * 12 + d) * 0.25;
+        else if (sad) a = 0.06;
+        else a = 0.18 + Math.sin(t * 2 + d) * 0.05;
+        const sx = d * bw * 0.45, sy = shY + s * 0.03;
+        const ex = sx + d * Math.sin(a) * armL, ey = sy + Math.cos(a) * armL;
+        this.limb(c, sx, sy, ex, ey, s * 0.055, sleeve);
+        c.fillStyle = skin; c.beginPath(); c.arc(ex, ey, s * 0.03, 0, Math.PI * 2); c.fill();
+        if (!cheer && d === 1 && st.hold === "book") { c.fillStyle = "#4361ee"; c.fillRect(ex - s * 0.02, ey - s * 0.07, s * 0.08, s * 0.1); }
+        if (!cheer && d === 1 && st.hold === "case") { c.fillStyle = "#6b4226"; Arcade.roundRect(ex - s * 0.06, ey, s * 0.12, s * 0.08, s * 0.01); c.fill(); }
+      });
+
+      // kepala
+      c.fillStyle = skin; c.beginPath(); c.arc(hx, hy, r, 0, Math.PI * 2); c.fill();
+      c.fillStyle = hair; c.beginPath(); c.arc(hx, hy - r * 0.08, r * 1.04, Math.PI * 1.02, Math.PI * 1.98); c.closePath(); c.fill();
+      c.beginPath(); c.ellipse(hx - r * 0.35, hy - r * 0.45, r * 0.55, r * 0.3, -0.4, 0, Math.PI * 2); c.fill();
+
+      // wajah
+      const ey = hy + r * 0.12;
+      c.fillStyle = "#2b1a12"; c.strokeStyle = "#2b1a12"; c.lineWidth = Math.max(1.2, r * 0.09); c.lineCap = "round";
+      if (cheer) {
+        [-1, 1].forEach((d) => { c.beginPath(); c.arc(hx + d * r * 0.38, ey + r * 0.05, r * 0.14, Math.PI * 1.1, Math.PI * 1.9); c.stroke(); });
+      } else {
+        [-1, 1].forEach((d) => { c.beginPath(); c.arc(hx + d * r * 0.38, ey, r * 0.1, 0, Math.PI * 2); c.fill(); });
+      }
+      if (sad) {
+        [-1, 1].forEach((d) => { c.beginPath(); c.moveTo(hx + d * r * 0.2, ey - r * 0.32); c.lineTo(hx + d * r * 0.55, ey - r * 0.2); c.stroke(); });
+        c.beginPath(); c.arc(hx, ey + r * 0.6, r * 0.22, Math.PI * 1.15, Math.PI * 1.85); c.stroke();
+        const ty = (t * 1.6) % 1;
+        c.fillStyle = "#7cc6ff";
+        [-1, 1].forEach((d) => { c.beginPath(); c.ellipse(hx + d * r * 0.42, ey + r * 0.2 + ty * r * 0.7, r * 0.07, r * 0.11, 0, 0, Math.PI * 2); c.fill(); });
+      } else {
+        c.beginPath(); c.arc(hx, ey + r * 0.22, r * (cheer ? 0.3 : 0.24), Math.PI * 0.15, Math.PI * 0.85); c.stroke();
+        c.fillStyle = "rgba(255,120,140,.45)";
+        [-1, 1].forEach((d) => { c.beginPath(); c.arc(hx + d * r * 0.6, ey + r * 0.3, r * 0.13, 0, Math.PI * 2); c.fill(); });
+      }
+    },
+
+    drawPerson(c, p, h, t, cheer, sad) {
+      const bob = cheer ? -Math.abs(Math.sin(t * 8 + p.phase)) * h * 0.06 : Math.sin(t * 1.5 + p.phase) * h * 0.01;
+      const r = h * 0.12, shY = -h * 0.72 + bob, waistY = -h * 0.4 + bob, bw = h * 0.26;
+      [-1, 1].forEach((d) => this.limb(c, d * h * 0.05, waistY, d * h * 0.05, -h * 0.02, h * 0.06, "#2b2d42"));
+      if (p.long) { c.fillStyle = p.hair; Arcade.roundRect(-r * 1.05, shY - r * 1.9, r * 2.1, r * 2.4, r * 0.6); c.fill(); }
+      c.fillStyle = p.body; Arcade.roundRect(-bw / 2, shY, bw, waistY - shY + h * 0.04, h * 0.05); c.fill();
+      [-1, 1].forEach((d) => {
+        const a = cheer ? 2.6 + Math.sin(t * 11 + p.phase + d) * 0.3 : sad ? 0.05 : (d === 1 ? 0.2 + Math.max(0, Math.sin(t * 3 + p.phase)) * 1.6 : 0.15);
+        const sx = d * bw * 0.45, sy = shY + h * 0.03, L = h * 0.27;
+        const ex = sx + d * Math.sin(a) * L, ey = sy + Math.cos(a) * L;
+        this.limb(c, sx, sy, ex, ey, h * 0.055, p.body);
+        c.fillStyle = p.skin; c.beginPath(); c.arc(ex, ey, h * 0.03, 0, Math.PI * 2); c.fill();
+      });
+      const hy = shY - r * 0.95;
+      c.fillStyle = p.skin; c.beginPath(); c.arc(0, hy, r, 0, Math.PI * 2); c.fill();
+      c.fillStyle = p.hair; c.beginPath(); c.arc(0, hy - r * 0.1, r * 1.04, Math.PI * 1.02, Math.PI * 1.98); c.closePath(); c.fill();
+      c.fillStyle = "#2b1a12"; c.strokeStyle = "#2b1a12"; c.lineWidth = Math.max(1, r * 0.1); c.lineCap = "round";
+      [-1, 1].forEach((d) => { c.beginPath(); c.arc(d * r * 0.36, hy + r * 0.1, r * 0.09, 0, Math.PI * 2); c.fill(); });
+      if (p.glasses) { c.lineWidth = Math.max(1, r * 0.07); [-1, 1].forEach((d) => { c.beginPath(); c.arc(d * r * 0.36, hy + r * 0.1, r * 0.22, 0, Math.PI * 2); c.stroke(); }); c.lineWidth = Math.max(1, r * 0.1); }
+      c.beginPath();
+      if (sad) c.arc(0, hy + r * 0.62, r * 0.2, Math.PI * 1.2, Math.PI * 1.8);
+      else c.arc(0, hy + r * 0.25, r * (cheer ? 0.3 : 0.22), Math.PI * 0.15, Math.PI * 0.85);
+      c.stroke();
+    }
+  };
+
+  /* =========================================================
      MODE ARCADE (canvas)
      ========================================================= */
   const Arcade = {
@@ -472,7 +846,7 @@
     running: false, raf: 0, last: 0,
     player: null, items: [], particles: [], floaters: [], stars: [],
     score: 0, lives: 3, time: 60, combo: 1, streak: 0, spawnT: 0, elapsed: 0, shield: 0,
-    gold: 0, rush: 0, rushGlow: 0, rushFlash: 0, flames: [],
+    gold: 0, rush: 0, rushGlow: 0, rushFlash: 0, flames: [], grace: 0, impacts: [], knockSfxT: 0,
     keys: {},
 
     init() {
@@ -511,6 +885,8 @@
       this.score = 0; this.lives = 3; this.time = 60; this.combo = 1; this.streak = 0;
       this.spawnT = 0; this.elapsed = 0; this.shield = 0;
       this.gold = 0; this.rush = 0; this.rushGlow = 0; this.rushFlash = 0; this.flames = [];
+      this.grace = 0; this.impacts = []; this.knockSfxT = 0;
+      Journey.reset();
       $(".canvas-wrap").classList.remove("rush");
       Music.setRush(false);
       this.updateHUD();
@@ -551,7 +927,7 @@
         type, label, w, h, fontSize,
         x, y: -h,
         vy: rand(90, 140) * (0.85 + level * 0.18) * (type === "bad" ? 1.05 : type === "gold" ? 1.25 : 1) * (this.rush > 0 ? 1.45 : 1),
-        wob: rand(0, Math.PI * 2)
+        wob: rand(0, Math.PI * 2), vx: 0, sq: 0, kcd: 0
       });
     },
 
@@ -568,6 +944,8 @@
       this.elapsed += dt;
       this.time -= dt;
       if (this.shield > 0) this.shield -= dt;
+      if (this.grace > 0) this.grace -= dt;
+      if (this.knockSfxT > 0) this.knockSfxT -= dt;
       if (this.rush > 0) { this.rush -= dt; if (this.rush <= 0) this.endRush(); }
       this.rushGlow += ((this.rush > 0 ? 1 : 0) - this.rushGlow) * Math.min(1, dt * 4);
       if (this.rushFlash > 0) this.rushFlash = Math.max(0, this.rushFlash - dt * 1.2);
@@ -595,6 +973,13 @@
         const it = this.items[i];
         it.y += it.vy * dt;
         it.wob += dt * 3;
+        it.x += it.vx * dt;
+        it.vx *= Math.max(0, 1 - dt * 2.5);
+        if (it.sq > 0) it.sq = Math.max(0, it.sq - dt * 4);
+        if (it.kcd > 0) it.kcd -= dt;
+        const half = it.w / 2 + (it.type === "gold" ? 22 : 6);
+        if (it.x < half) { it.x = half; it.vx = Math.abs(it.vx) * 0.6; }
+        if (it.x > this.W - half) { it.x = this.W - half; it.vx = -Math.abs(it.vx) * 0.6; }
         const ix = this.wobX(it);
         const hit = Math.abs(ix - p.x) < (it.w / 2 + p.w / 2 - 14) && Math.abs(it.y - p.y) < (it.h / 2 + p.h / 2 - 6);
         if (hit) { this.collect(it, ix); this.items.splice(i, 1); continue; }
@@ -603,6 +988,13 @@
           this.items.splice(i, 1);
         }
       }
+
+      this.knockback();
+      for (let i = this.impacts.length - 1; i >= 0; i--) {
+        this.impacts[i].t += dt;
+        if (this.impacts[i].t > 0.45) this.impacts.splice(i, 1);
+      }
+      Journey.update(dt, this.H);
 
       // partikel
       for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -638,6 +1030,7 @@
         this.score += pts;
         this.burst(x, it.y, ["#2ee6c5", "#ffd23f", "#ffffff"]);
         this.float(x, it.y, "+" + pts, "#2ee6c5");
+        Journey.gain(this.rush > 0 ? 2 : 1);
         sfx.good();
         if (this.streak > 0 && this.streak % 4 === 0) toast(`🔥 Combo x${this.combo}!`);
       } else if (it.type === "gold") {
@@ -648,6 +1041,7 @@
         this.burst(x, it.y, ["#ffd23f", "#fff3b0", "#ff9f1c", "#ffffff"]);
         this.burst(x, it.y, ["#ffd23f", "#ffffff"]);
         this.float(x, it.y, "+" + pts, "#ffd23f");
+        Journey.gain(this.rush > 0 ? 4 : 2);
         sfx.gold();
         if (this.rush > 0) { this.rush = Math.min(RUSH_TIME + 4, this.rush + 2); toast("🔥 Rush +2 detik!"); }
         else if (++this.gold >= RUSH_NEED) this.startRush();
@@ -661,7 +1055,7 @@
           sfx.mid();
           return;
         }
-        if (this.shield > 0) {
+        if (this.shield > 0 || this.grace > 0) {
           this.score += 5;
           this.burst(x, it.y, ["#ffd23f", "#ffffff"]);
           this.float(x, it.y, "Ditangkis!", "#ffd23f");
@@ -671,6 +1065,7 @@
         this.lives--;
         this.streak = 0; this.combo = 1;
         if (this.gold > 0) this.gold--; // satu segmen meteran Golden Rush hilang
+        Journey.fail();
         this.burst(x, it.y, ["#ff5c6c", "#ff9f1c"]);
         this.float(x, it.y, "−1 💔", "#ff5c6c");
         sfx.bad();
@@ -684,6 +1079,40 @@
         this.burst(x, it.y, ["#ffd23f", "#9b5cff", "#ffffff"]);
       }
     },
+    // Pesan yang saling bertabrakan tidak menumpuk: keduanya terpental.
+    knockback() {
+      const its = this.items;
+      for (let i = 0; i < its.length; i++) {
+        for (let j = i + 1; j < its.length; j++) {
+          const a = its[i], b = its[j];
+          const dx = this.wobX(a) - this.wobX(b), dy = a.y - b.y;
+          const penX = (a.w + b.w) / 2 + 4 - Math.abs(dx), penY = (a.h + b.h) / 2 + 4 - Math.abs(dy);
+          if (penX <= 0 || penY <= 0) continue;
+          const dir = dx === 0 ? (Math.random() < .5 ? -1 : 1) : Math.sign(dx);
+          if (penY < penX) {
+            // tabrakan atas-bawah: yang di atas terdorong naik dan ikut melambat
+            const up = a.y < b.y ? a : b, low = up === a ? b : a;
+            up.y -= penY;
+            up.vy = Math.min(up.vy, low.vy * 0.95);
+          } else {
+            a.x += dir * penX / 2; b.x -= dir * penX / 2;
+          }
+          const fresh = a.kcd <= 0 || b.kcd <= 0;
+          a.vx = dir * Math.max(Math.abs(a.vx), 170); b.vx = -dir * Math.max(Math.abs(b.vx), 170);
+          if (fresh) {
+            a.sq = b.sq = 1; a.kcd = b.kcd = 0.35;
+            const cx = (this.wobX(a) + this.wobX(b)) / 2, cy = (a.y + b.y) / 2;
+            this.impacts.push({ x: cx, y: cy, t: 0, word: Math.random() < .5 ? pick(["POW!", "BAM!", "DUAK!"]) : "" });
+            for (let k = 0; k < 10; k++) {
+              const ang = rand(0, Math.PI * 2), sp = rand(90, 220);
+              this.particles.push({ x: cx, y: cy, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 60, life: rand(.25, .5), c: pick(["#ffffff", "#fff3b0", "#9fd8ff"]), r: rand(1.5, 3.5) });
+            }
+            if (this.knockSfxT <= 0) { sfx.knock(); this.knockSfxT = 0.08; }
+          }
+        }
+      }
+    },
+
     // pesan emas bergoyang lebih lebar agar lebih sulit ditangkap
     wobX(it) { return it.x + Math.sin(it.wob) * (it.type === "gold" ? 22 : 6); },
 
@@ -701,8 +1130,9 @@
       this.rush = 0;
       $(".canvas-wrap").classList.remove("rush");
       Music.setRush(false);
+      this.grace = 3; // waktu pulih: kebal 3 detik setelah Golden Rush
       sfx.rushEnd();
-      toast("Golden Rush selesai");
+      toast("✨ Rush selesai, kebal 3 detik!");
     },
     burst(x, y, colors) {
       for (let i = 0; i < 18; i++) {
@@ -720,7 +1150,7 @@
       const meter = $("#rush-meter"), on = this.rush > 0;
       meter.classList.toggle("active", on);
       $("#rush-fill").style.width = (on ? Math.min(1, this.rush / RUSH_TIME) : this.gold / RUSH_NEED) * 100 + "%";
-      $("#rush-label").textContent = on ? "🔥 GOLDEN RUSH x2" : "✨ Golden Rush";
+      $("#rush-label").textContent = on ? "🔥 GOLDEN RUSH x2" : this.grace > 0 ? "✨ Kebal " + Math.ceil(this.grace) + "s" : "✨ Golden Rush";
       $("#rush-count").textContent = on ? Math.ceil(this.rush) + "s" : this.gold + "/" + RUSH_NEED;
     },
 
@@ -766,13 +1196,16 @@
         this.stars.forEach((s) => { c.beginPath(); c.arc(s.x, s.y, s.r, 0, Math.PI * 2); c.fill(); });
       }
 
-      // gedung sekolah di bawah
-      c.fillStyle = "rgba(255,255,255,.05)";
-      for (let i = 0; i < 6; i++) { const bw = W / 6; c.fillRect(i * bw + 6, H - 30 - (i % 3) * 18, bw - 12, 60); }
+      // latar perjalanan: lingkungan, tokoh, dan para pendukungnya
+      Journey.draw(c, W, H);
 
       // item
       this.items.forEach((it) => {
         const x = this.wobX(it);
+        c.save();
+        if (it.sq > 0) { // efek gepeng saat terpental
+          c.translate(x, it.y); c.scale(1 + it.sq * 0.2, 1 - it.sq * 0.18); c.translate(-x, -it.y);
+        }
         const colors = it.type === "good" ? ["#2ee6c5", "#1a9e8a"] : it.type === "bad" ? ["#ff5c6c", "#b3263a"]
           : it.type === "gold" ? ["#fff1a8", "#e8a000"] : ["#ffd23f", "#ff9f1c"];
         c.shadowColor = it.type === "gold" ? "#ffd23f" : colors[0];
@@ -794,6 +1227,30 @@
         c.font = `800 ${it.fontSize}px Nunito, sans-serif`;
         c.textBaseline = "middle";
         this.centerText(it.label, x, it.y + 1);
+        c.restore();
+      });
+
+      // efek benturan antarpesan
+      this.impacts.forEach((m) => {
+        const k = m.t / 0.45, a = 1 - k;
+        c.strokeStyle = `rgba(255,255,255,${a})`; c.lineWidth = 3 * a + 1;
+        c.beginPath(); c.arc(m.x, m.y, 6 + k * 46, 0, Math.PI * 2); c.stroke();
+        c.strokeStyle = `rgba(255,243,176,${a})`; c.lineWidth = 2;
+        for (let r = 0; r < 8; r++) {
+          const ang = r * Math.PI / 4 + 0.3;
+          c.beginPath();
+          c.moveTo(m.x + Math.cos(ang) * (10 + k * 26), m.y + Math.sin(ang) * (10 + k * 26));
+          c.lineTo(m.x + Math.cos(ang) * (18 + k * 44), m.y + Math.sin(ang) * (18 + k * 44));
+          c.stroke();
+        }
+        if (m.word && k < 0.8) {
+          c.save();
+          c.translate(m.x, m.y - 18 - k * 12); c.rotate(-0.15); c.scale(1 + (1 - k) * 0.3, 1 + (1 - k) * 0.3);
+          c.globalAlpha = a; c.font = "800 16px Fredoka, sans-serif"; c.textBaseline = "middle";
+          c.lineWidth = 4; c.strokeStyle = "#ff6a00"; c.textAlign = "center";
+          c.strokeText(m.word, 0, 0); c.fillStyle = "#fff3b0"; c.fillText(m.word, 0, 0);
+          c.restore();
+        }
       });
 
       // api Golden Rush
@@ -812,6 +1269,12 @@
       if (p) {
         c.save();
         c.translate(p.x, p.y); c.rotate(p.tilt);
+        if (this.grace > 0 && this.shield <= 0) { // kebal sesudah Golden Rush: berkedip
+          c.globalAlpha = 0.55 + 0.45 * Math.abs(Math.sin(performance.now() / 70));
+          c.strokeStyle = "rgba(255,243,176,.9)"; c.lineWidth = 3; c.setLineDash([6, 5]);
+          c.beginPath(); c.ellipse(0, 0, p.w / 2 + 14, p.h / 2 + 18, 0, 0, Math.PI * 2); c.stroke();
+          c.setLineDash([]);
+        }
         if (this.shield > 0) {
           c.strokeStyle = `rgba(255,210,63,${0.5 + Math.sin(performance.now() / 100) * 0.3})`;
           c.lineWidth = 4; c.beginPath(); c.ellipse(0, 0, p.w / 2 + 16, p.h / 2 + 22, 0, 0, Math.PI * 2); c.stroke();
