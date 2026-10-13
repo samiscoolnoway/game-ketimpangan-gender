@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SETARA: Misi Sekolah Adil</title>
+  <meta name="description" content="Game interaktif tentang kesetaraan gender di sekolah — Pemira MPK & OSIS.">
+  <meta property="og:title" content="SETARA: Misi Sekolah Adil">
+  <meta property="og:description" content="Main game, lawan stereotip gender, wujudkan sekolah yang adil untuk semua!">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Nunito:wght@400;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="bg-blobs" aria-hidden="true">
+    <span></span><span></span><span></span>
+  </div>
+
+  <main id="app">
+    <!-- ============ LAYAR MENU ============ -->
+    <section id="screen-menu" class="screen active">
+      <div class="campaign-badge">
+        <span class="badge-no" data-config="nomor">01</span>
+        <span>
+          <small>Pemira MPK &amp; OSIS</small>
+          <strong data-config="namaPaslon">Nama Paslon</strong>
+        </span>
+      </div>
+
+      <div class="hero">
+        <div class="hero-icons" aria-hidden="true">
+          <span class="float f1">👩‍🎓</span>
+          <span class="float f2">⚖️</span>
+          <span class="float f3">👨‍🎓</span>
+        </div>
+        <h1 class="title">SETARA<span>Misi Sekolah Adil</span></h1>
+        <p class="tagline">Lawan stereotip, hapus ketimpangan gender, dan wujudkan sekolah di mana <b>semua</b> punya kesempatan yang sama!</p>
+      </div>
+
+      <div class="card name-card">
+        <label for="player-name">Nama kamu</label>
+        <input id="player-name" type="text" maxlength="16" placeholder="cth: Raka / Nadia" autocomplete="off">
+      </div>
+
+      <div class="mode-grid">
+        <button class="mode-btn mode-story" data-action="start-story">
+          <span class="mode-emoji">📖</span>
+          <span class="mode-title">Mode Cerita</span>
+          <span class="mode-desc">Hadapi 10 situasi nyata di sekolah. Pilihanmu menentukan masa depan sekolah!</span>
+        </button>
+        <button class="mode-btn mode-arcade" data-action="start-arcade">
+          <span class="mode-emoji">🌟</span>
+          <span class="mode-title">Mode Arcade</span>
+          <span class="mode-desc">Tangkap nilai kesetaraan, hindari gelembung stereotip. Seberapa lama kamu bertahan?</span>
+        </button>
+      </div>
+
+      <div class="menu-row">
+        <button class="btn btn-ghost" data-action="leaderboard">🏆 Papan Skor</button>
+        <button class="btn btn-ghost" data-action="about">💡 Tentang</button>
+        <button class="btn btn-ghost" id="btn-sound" data-action="toggle-sound">🔊 Suara</button>
+      </div>
+    </section>
+
+    <!-- ============ MODE CERITA ============ -->
+    <section id="screen-story" class="screen">
+      <header class="hud">
+        <button class="btn-icon" data-action="menu" aria-label="Kembali ke menu">←</button>
+        <div class="meter-wrap">
+          <div class="meter-label">
+            <span>Indeks Kesetaraan Sekolah</span>
+            <b id="meter-value">50</b>
+          </div>
+          <div class="meter"><div id="meter-fill"></div></div>
+        </div>
+        <div class="school-mood" id="school-mood" aria-hidden="true">🏫</div>
+      </header>
+
+      <div class="progress-dots" id="progress-dots"></div>
+
+      <article class="card scenario-card" id="scenario-card">
+        <div class="scene-art" id="scene-art">🏫</div>
+        <span class="scene-tag" id="scene-tag">Kelas</span>
+        <h2 id="scene-title">Judul</h2>
+        <p id="scene-text">Cerita…</p>
+        <div class="choices" id="choices"></div>
+      </article>
+
+      <div class="card feedback-card hidden" id="feedback-card">
+        <div class="feedback-head">
+          <span id="feedback-emoji">✅</span>
+          <h3 id="feedback-title">Mantap!</h3>
+          <span class="delta" id="feedback-delta">+10</span>
+        </div>
+        <p id="feedback-text"></p>
+        <div class="fact"><b>💡 Tahukah kamu?</b> <span id="feedback-fact"></span></div>
+        <button class="btn btn-primary" data-action="next-scene">Lanjut →</button>
+      </div>
+    </section>
+
+    <!-- ============ MODE ARCADE ============ -->
+    <section id="screen-arcade" class="screen">
+      <header class="hud hud-arcade">
+        <button class="btn-icon" data-action="menu" aria-label="Kembali ke menu">←</button>
+        <div class="stat"><small>Skor</small><b id="arc-score">0</b></div>
+        <div class="stat"><small>Waktu</small><b id="arc-time">60</b></div>
+        <div class="stat"><small>Nyawa</small><b id="arc-lives">❤️❤️❤️</b></div>
+        <div class="stat"><small>Combo</small><b id="arc-combo">x1</b></div>
+      </header>
+      <div class="canvas-wrap">
+        <canvas id="arcade-canvas"></canvas>
+        <div class="arcade-overlay" id="arcade-overlay">
+          <div class="card">
+            <h2>Cara Main 🎮</h2>
+            <div class="legend">
+              <div><span class="pill good">⭐ Kesempatan Sama</span> Tangkap! +poin</div>
+              <div><span class="pill bad">💬 "Cewek gak bisa…"</span> Hindari! −nyawa</div>
+              <div><span class="pill power">🛡️ Perisai</span> Kebal 5 detik</div>
+            </div>
+            <p class="hint">Geser jari / mouse, atau pakai tombol ← → di keyboard.</p>
+            <button class="btn btn-primary" data-action="arcade-go">Mulai!</button>
+          </div>
+        </div>
+        <div class="toast" id="arcade-toast"></div>
+      </div>
+    </section>
+
+    <!-- ============ HASIL ============ -->
+    <section id="screen-result" class="screen">
+      <div class="card result-card">
+        <div class="result-badge" id="result-badge">🏅</div>
+        <p class="result-rank" id="result-rank">Pahlawan Kesetaraan</p>
+        <h2 class="result-score"><span id="result-score">0</span><small>poin</small></h2>
+        <p id="result-text"></p>
+
+        <div class="campaign-box">
+          <p class="campaign-small">Bersama kami, wujudkan sekolah yang setara!</p>
+          <div class="campaign-main">
+            <span class="badge-no big" data-config="nomor">01</span>
+            <div>
+              <strong data-config="namaPaslon">Nama Paslon</strong>
+              <em data-config="slogan">"Slogan"</em>
+            </div>
+          </div>
+          <ul class="program-list" id="program-list"></ul>
+        </div>
+
+        <div class="result-actions">
+          <button class="btn btn-primary" data-action="replay">🔁 Main Lagi</button>
+          <button class="btn btn-secondary" data-action="share">📤 Bagikan</button>
+          <button class="btn btn-ghost" data-action="menu">🏠 Menu</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PAPAN SKOR ============ -->
+    <section id="screen-leaderboard" class="screen">
+      <div class="card">
+        <h2>🏆 Papan Skor</h2>
+        <div class="tabs">
+          <button class="tab active" data-board="story">Mode Cerita</button>
+          <button class="tab" data-board="arcade">Mode Arcade</button>
+        </div>
+        <ol class="board" id="board-list"></ol>
+        <p class="hint">Skor disimpan di perangkat ini.</p>
+        <button class="btn btn-ghost" data-action="menu">← Kembali</button>
+      </div>
+    </section>
+
+    <!-- ============ TENTANG ============ -->
+    <section id="screen-about" class="screen">
+      <div class="card about-card">
+        <h2>💡 Kenapa Kesetaraan Gender?</h2>
+        <p><b>Ketimpangan gender</b> adalah keadaan ketika seseorang mendapat perlakuan, kesempatan, atau penilaian yang berbeda <i>hanya</i> karena ia laki-laki atau perempuan.</p>
+        <p>Di sekolah, bentuknya sering terlihat sepele: piket hanya untuk siswi, ketua kelas "harus" cowok, cowok diejek kalau suka menari, atau cewek dianggap tidak cocok di robotik dan futsal.</p>
+        <p>Kesetaraan gender adalah <b>Tujuan ke-5</b> dari Tujuan Pembangunan Berkelanjutan (SDGs) PBB. Artinya, ini bukan cuma urusan satu kelompok — ini urusan kita semua.</p>
+        <div class="fact"><b>Setara bukan berarti sama persis.</b> Setara berarti setiap orang mendapat kesempatan, rasa hormat, dan perlindungan yang adil.</div>
+        <button class="btn btn-ghost" data-action="menu">← Kembali</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="confetti-layer" aria-hidden="true"></div>
+
+  <script src="config.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
