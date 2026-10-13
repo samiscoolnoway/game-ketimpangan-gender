@@ -358,7 +358,7 @@
       const r = Math.random();
       let type, label;
       if (r < 0.06) { type = "power"; label = Math.random() < .5 ? "🛡️ Perisai" : "⏰ +5 detik"; }
-      else if (r < 0.06 + Math.min(0.45, 0.3 + this.elapsed / 200)) { type = "bad"; label = pick(BAD_ITEMS); }
+      else if (r < 0.06 + Math.min(0.32, 0.22 + this.elapsed / 300)) { type = "bad"; label = pick(BAD_ITEMS); }
       else { type = "good"; label = pick(GOOD_ITEMS); }
       const fontSize = this.W < 420 ? 13 : 15;
       this.ctx.font = `800 ${fontSize}px Nunito, sans-serif`;
@@ -468,7 +468,7 @@
         if (this.lives <= 0) this.end("Nyawa habis!");
       } else {
         sfx.power();
-        if (it.label.startsWith("🛡️")) { this.shield = 5; toast("🛡️ Perisai aktif 5 detik!"); }
+        if (it.label.startsWith("🛡️")) { this.shield = 8; toast("🛡️ Perisai aktif 8 detik!"); }
         else { this.time += 5; toast("⏰ +5 detik!"); }
         this.burst(x, it.y, ["#ffd23f", "#9b5cff", "#ffffff"]);
       }
