@@ -336,7 +336,7 @@
       requestAnimationFrame(() => { this.resize(); this.reset(); this.draw(); });
     },
     reset() {
-      this.player = { x: this.W / 2, tx: this.W / 2, y: this.H - 60, w: 90, h: 46, tilt: 0 };
+      this.player = { x: this.W / 2, tx: this.W / 2, y: this.H - 60, w: 60, h: 32, tilt: 0 };
       this.items = []; this.particles = []; this.floaters = [];
       this.score = 0; this.lives = 3; this.time = 60; this.combo = 1; this.streak = 0;
       this.spawnT = 0; this.elapsed = 0; this.shield = 0;
@@ -544,11 +544,11 @@
         const pg = c.createLinearGradient(-p.w / 2, 0, p.w / 2, 0);
         pg.addColorStop(0, "#ff5fa2"); pg.addColorStop(1, "#9b5cff");
         c.fillStyle = pg; c.shadowColor = "#ff5fa2"; c.shadowBlur = 20;
-        this.roundRect(-p.w / 2, -p.h / 2, p.w, p.h, 12); c.fill();
+        this.roundRect(-p.w / 2, -p.h / 2, p.w, p.h, 10); c.fill();
         c.shadowBlur = 0;
-        c.fillStyle = "rgba(0,0,0,.35)"; this.roundRect(-p.w / 4, -p.h / 2 + 5, p.w / 2, 7, 3); c.fill();
-        c.font = "22px sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
-        c.fillText("⚖️", 0, 6);
+        c.fillStyle = "rgba(0,0,0,.35)"; this.roundRect(-p.w / 4, -p.h / 2 + 4, p.w / 2, 5, 2); c.fill();
+        c.font = "16px sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
+        c.fillText("⚖️", 0, 4);
         c.restore();
       }
 
