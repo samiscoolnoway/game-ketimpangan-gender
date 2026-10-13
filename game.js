@@ -114,10 +114,11 @@
   ];
 
   /* ---------------- Data Arcade ---------------- */
+  const SHIELD_LABEL = "🔒 Perisai";
   const GOOD_ITEMS = [
-    "⭐ Kesempatan Sama", "🤝 Saling Hormat", "🗳️ Semua Boleh Memimpin", "📚 Pendidikan untuk Semua",
+    "⭐ Kesempatan Sama", "🤝 Saling Hormat", "🙋 Semua Boleh Memimpin", "📚 Pendidikan untuk Semua",
     "💬 Semua Suara Didengar", "⚽ Olahraga untuk Semua", "🎨 Hobi Tanpa Label", "🧹 Piket Bergilir",
-    "💪 Berani Bersuara", "❤️ Empati", "🎓 Mimpi Tanpa Batas", "🛑 Stop Pelecehan"
+    "💪 Berani Bersuara", "💖 Empati", "🎓 Mimpi Tanpa Batas", "🛑 Stop Pelecehan"
   ];
   const BAD_ITEMS = [
     "\"Cewek gak bisa mimpin\"", "\"Cowok gak boleh nangis\"", "\"Nyapu urusan cewek\"",
@@ -357,7 +358,7 @@
       const level = 1 + this.elapsed / 15;
       const r = Math.random();
       let type, label;
-      if (r < 0.06) { type = "power"; label = Math.random() < .5 ? "🛡️ Perisai" : "⏰ +5 detik"; }
+      if (r < 0.06) { type = "power"; label = Math.random() < .5 ? SHIELD_LABEL : "⏰ +5 detik"; }
       else if (r < 0.06 + Math.min(0.32, 0.22 + this.elapsed / 300)) { type = "bad"; label = pick(BAD_ITEMS); }
       else { type = "good"; label = pick(GOOD_ITEMS); }
       const fontSize = this.W < 420 ? 13 : 15;
@@ -461,14 +462,14 @@
         this.lives--;
         this.streak = 0; this.combo = 1;
         this.burst(x, it.y, ["#ff5c6c", "#ff9f1c"]);
-        this.float(x, it.y, "−1 ❤️", "#ff5c6c");
+        this.float(x, it.y, "−1 💔", "#ff5c6c");
         sfx.bad();
         this.shake = 0.3;
         toast("Stereotip! " + it.label + " ✗");
         if (this.lives <= 0) this.end("Nyawa habis!");
       } else {
         sfx.power();
-        if (it.label.startsWith("🛡️")) { this.shield = 8; toast("🛡️ Perisai aktif 8 detik!"); }
+        if (it.label === SHIELD_LABEL) { this.shield = 8; toast("🛡️ Perisai aktif 8 detik!"); }
         else { this.time += 5; toast("⏰ +5 detik!"); }
         this.burst(x, it.y, ["#ffd23f", "#9b5cff", "#ffffff"]);
       }
@@ -495,10 +496,12 @@
       c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
     },
 
-    // Safari salah menghitung textAlign "center" untuk teks ber-emoji,
-    // jadi posisikan manual dari lebar hasil measureText.
+    // Safari menggeser teks canvas yang memuat emoji dengan variation selector
+    // (U+FE0F, mis. "❤️", "🛡️") keluar dari posisinya. Jadi label di canvas
+    // hanya pakai emoji tanpa U+FE0F, dan selector yang tersisa dibuang di sini.
     centerText(text, x, y) {
       const c = this.ctx;
+      text = text.replace(/\uFE0F/g, "");
       c.textAlign = "left";
       c.fillText(text, x - c.measureText(text).width / 2, y);
     },
@@ -555,8 +558,8 @@
         this.roundRect(-p.w / 2, -p.h / 2, p.w, p.h, 10); c.fill();
         c.shadowBlur = 0;
         c.fillStyle = "rgba(0,0,0,.35)"; this.roundRect(-p.w / 4, -p.h / 2 + 4, p.w / 2, 5, 2); c.fill();
-        c.font = "16px sans-serif"; c.textBaseline = "middle";
-        this.centerText("⚖️", 0, 4);
+        c.fillStyle = "#ffffff"; c.font = "16px sans-serif"; c.textBaseline = "middle";
+        this.centerText("⚖", 0, 4);
         c.restore();
       }
 
@@ -565,7 +568,7 @@
       c.globalAlpha = 1;
       this.floaters.forEach((f) => {
         c.globalAlpha = Math.max(0, f.life); c.fillStyle = f.color;
-        c.font = "800 20px Fredoka, sans-serif"; c.textAlign = "center"; c.fillText(f.text, f.x, f.y);
+        c.font = "800 20px Fredoka, sans-serif"; this.centerText(f.text, f.x, f.y);
       });
       c.globalAlpha = 1;
       c.restore();
