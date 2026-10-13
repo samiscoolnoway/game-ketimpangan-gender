@@ -136,7 +136,7 @@
 
   /* ---------------- State & util ---------------- */
   const state = {
-    name: "", mode: "story", soundOn: true,
+    name: "", mode: "story", soundOn: true, musicOn: true,
     story: { idx: 0, meter: 50, score: 0, history: [] },
     lastResult: null
   };
@@ -182,12 +182,167 @@
     win: () => { [523, 659, 784, 1046, 1318].forEach((f, i) => setTimeout(() => beep(f, .18, "triangle", .12), i * 110)); }
   };
 
+  /* ---------------- Musik latar (Web Audio, komposisi orisinal) ----------------
+     Tiga lagu loop yang disusun dari not: lobi (ceria), cerita (tenang, reflektif),
+     arcade (chiptune cepat; lebih kencang saat Golden Rush). Satu langkah = not 1/16. */
+  const Music = (() => {
+    let master = null, track = null, want = "lobby", on = true, rush = false;
+    let timer = 0, step = 0, nextT = 0, noiseBuf = null;
+    const mtof = (n) => 440 * Math.pow(2, (n - 69) / 12);
+
+    function tone(n, t, dur, type, vol, attack = 0.01) {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = type; o.frequency.setValueAtTime(mtof(n), t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(vol, t + attack);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(dur, attack + 0.02));
+      o.connect(g).connect(master); o.start(t); o.stop(t + dur + 0.05);
+    }
+    function noise(t, dur, vol, hp = 6000) {
+      if (!noiseBuf) {
+        noiseBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.5, audioCtx.sampleRate);
+        const d = noiseBuf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      }
+      const s = audioCtx.createBufferSource(), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain();
+      s.buffer = noiseBuf; f.type = "highpass"; f.frequency.value = hp;
+      g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      s.connect(f).connect(g).connect(master); s.start(t); s.stop(t + dur + 0.02);
+    }
+    function kick(t, vol) {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.14);
+      g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      o.connect(g).connect(master); o.start(t); o.stop(t + 0.2);
+    }
+    const melodyAt = (bars, bar, s) => { const hit = bars[bar].find((m) => m[0] === s); return hit && hit[1]; };
+
+    const TRACKS = {
+      // "Langkah Bersama" — C mayor, I–V–vi–IV, ceria dan ringan
+      lobby: {
+        bpm: 108,
+        chords: [[60, 64, 67], [55, 59, 62], [57, 60, 64], [53, 57, 60]],
+        mel: [
+          [[0, 72], [4, 74], [6, 76], [10, 79], [12, 76]],
+          [[0, 74], [4, 71], [8, 74], [12, 79]],
+          [[0, 76], [4, 72], [6, 74], [8, 76], [12, 81]],
+          [[0, 77], [4, 76], [8, 74], [12, 72]]
+        ],
+        play(s, bar, t, d) {
+          const ch = this.chords[bar];
+          if (s % 4 === 0) tone(ch[0] - 24, t, d * 3, "triangle", 0.2);
+          if (s % 2 === 0) tone(ch[(s / 2) % 3] + 12, t, d * 1.6, "triangle", 0.05);
+          const m = melodyAt(this.mel, bar, s);
+          if (m) tone(m, t, d * 3, "sine", 0.09);
+          if (s % 8 === 0) kick(t, 0.22);
+          if (s % 4 === 2) noise(t, 0.04, 0.025);
+        }
+      },
+      // "Ruang Refleksi" — F mayor, akor maj7 yang lembut, untuk berpikir
+      story: {
+        bpm: 76,
+        chords: [[53, 57, 60, 64], [50, 53, 57, 60], [46, 50, 53, 57], [48, 52, 55, 58]],
+        mel: [
+          [[0, 72], [6, 69], [8, 67]],
+          [[4, 69], [8, 65]],
+          [[0, 70], [6, 69], [10, 65]],
+          [[0, 67], [8, 64], [12, 67]]
+        ],
+        play(s, bar, t, d) {
+          const ch = this.chords[bar];
+          if (s === 0) ch.forEach((n) => tone(n + 12, t, d * 16, "sine", 0.035, 0.5));
+          if (s === 0 || s === 10) tone(ch[0] - 12, t, d * 8, "sine", 0.13, 0.05);
+          const m = melodyAt(this.mel, bar, s);
+          if (m) { tone(m, t, d * 6, "sine", 0.07); tone(m + 12, t, d * 2, "triangle", 0.015); }
+          if (s % 4 === 2) noise(t, 0.05, 0.01, 8000);
+        }
+      },
+      // "Lari Setara" — A minor, chiptune cepat
+      arcade: {
+        bpm: 138,
+        chords: [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]],
+        mel: [
+          [[0, 76], [2, 72], [4, 69], [6, 72], [8, 76], [10, 79], [12, 81], [14, 79]],
+          [[0, 77], [2, 76], [4, 72], [6, 69], [8, 72], [10, 77], [12, 76], [14, 72]],
+          [[0, 76], [2, 79], [4, 84], [6, 79], [8, 76], [10, 72], [12, 74], [14, 76]],
+          [[0, 74], [2, 71], [4, 67], [6, 71], [8, 74], [10, 79], [12, 83], [14, 79]]
+        ],
+        play(s, bar, t, d) {
+          const ch = this.chords[bar];
+          if (s % 2 === 0) tone(ch[0] - 24 + (s % 4 === 2 ? 12 : 0), t, d * 1.5, "square", 0.05);
+          const m = melodyAt(this.mel, bar, s);
+          if (m) {
+            tone(m, t, d * 1.4, "square", 0.04);
+            if (rush) tone(m + 7, t, d * 1.4, "sawtooth", 0.025); // lapisan api Golden Rush
+          }
+          if (s % 4 === 0) kick(t, 0.3);
+          if (s % 8 === 4) noise(t, 0.12, 0.07, 1500);
+          if (rush || s % 2 === 0) noise(t, 0.03, 0.02);
+        }
+      }
+    };
+
+    function tick() {
+      if (!track || !audioCtx) return;
+      const now = audioCtx.currentTime;
+      if (nextT < now - 0.2) nextT = now + 0.05; // tab sempat tertidur: jangan memutar tumpukan not
+      while (nextT < now + 0.15) {
+        const tr = TRACKS[track];
+        const d = 60 / (tr.bpm * (track === "arcade" && rush ? 1.2 : 1)) / 4;
+        const bar = Math.floor(step / 16) % tr.chords.length;
+        try { tr.play(step % 16, bar, nextT, d); } catch { /* abaikan */ }
+        nextT += d; step++;
+      }
+    }
+
+    function start() {
+      if (!audioCtx || !on || !state.soundOn || document.hidden) return;
+      if (!master) { master = audioCtx.createGain(); master.connect(audioCtx.destination); }
+      if (track !== want || !timer) {
+        track = want; step = 0;
+        nextT = audioCtx.currentTime + 0.1;
+        master.gain.cancelScheduledValues(audioCtx.currentTime);
+        master.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+        master.gain.exponentialRampToValueAtTime(0.6, audioCtx.currentTime + 0.8);
+      }
+      if (!timer) timer = setInterval(tick, 25);
+    }
+    function stop() {
+      clearInterval(timer); timer = 0; track = null;
+      if (master && audioCtx) {
+        master.gain.cancelScheduledValues(audioCtx.currentTime);
+        master.gain.setValueAtTime(master.gain.value, audioCtx.currentTime);
+        master.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.15);
+        // ganti master agar not yang sudah terjadwal ikut senyap
+        const old = master; master = null; setTimeout(() => old.disconnect(), 300);
+      }
+    }
+
+    // Browser hanya mengizinkan audio setelah interaksi pertama pengguna.
+    function unlock() {
+      try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+      } catch { return; }
+      start();
+    }
+    ["pointerdown", "keydown", "touchend"].forEach((ev) => document.addEventListener(ev, unlock, { passive: true }));
+    document.addEventListener("visibilitychange", () => (document.hidden ? stop() : start()));
+
+    return {
+      play(name) { if (name === want && timer) return; want = name; stop(); start(); },
+      setRush(v) { rush = v; },
+      setEnabled(v) { on = v; on && state.soundOn ? start() : stop(); }
+    };
+  })();
+
   /* ---------------- Navigasi layar ---------------- */
   function show(id) {
     $$(".screen").forEach((s) => s.classList.remove("active"));
     $("#screen-" + id).classList.add("active");
     window.scrollTo({ top: 0, behavior: "smooth" });
     if (id !== "arcade") Arcade.stop();
+    Music.play(id === "story" || id === "arcade" ? id : "lobby");
   }
 
   function playerName() {
@@ -357,6 +512,7 @@
       this.spawnT = 0; this.elapsed = 0; this.shield = 0;
       this.gold = 0; this.rush = 0; this.rushGlow = 0; this.rushFlash = 0; this.flames = [];
       $(".canvas-wrap").classList.remove("rush");
+      Music.setRush(false);
       this.updateHUD();
     },
     go() {
@@ -537,12 +693,14 @@
       this.rushFlash = 1;
       this.shake = 0.25;
       $(".canvas-wrap").classList.add("rush");
+      Music.setRush(true);
       sfx.rush();
       toast("🔥 GOLDEN RUSH! Skor x2 & kebal!");
     },
     endRush() {
       this.rush = 0;
       $(".canvas-wrap").classList.remove("rush");
+      Music.setRush(false);
       sfx.rushEnd();
       toast("Golden Rush selesai");
     },
@@ -695,6 +853,7 @@
     end(reason) {
       this.stop();
       $(".canvas-wrap").classList.remove("rush");
+      Music.setRush(false);
       sfx.win();
       const s = this.score;
       let badge, rank, text;
@@ -809,6 +968,14 @@
       state.soundOn = !state.soundOn;
       store.set("setara_sound", state.soundOn);
       $("#btn-sound").textContent = state.soundOn ? "🔊 Suara" : "🔇 Bisu";
+      Music.setEnabled(state.musicOn);
+      sfx.click();
+    },
+    "toggle-music": () => {
+      state.musicOn = !state.musicOn;
+      store.set("setara_music", state.musicOn);
+      $("#btn-music").textContent = state.musicOn ? "🎵 Musik" : "🎵 Mati";
+      Music.setEnabled(state.musicOn);
       sfx.click();
     }
   };
@@ -832,6 +999,9 @@
   /* ---------------- Init ---------------- */
   state.soundOn = store.get("setara_sound", true);
   $("#btn-sound").textContent = state.soundOn ? "🔊 Suara" : "🔇 Bisu";
+  state.musicOn = store.get("setara_music", true);
+  $("#btn-music").textContent = state.musicOn ? "🎵 Musik" : "🎵 Mati";
+  Music.setEnabled(state.musicOn);
   $("#player-name").value = store.get("setara_name", "");
   $("#player-name").addEventListener("input", (e) => store.set("setara_name", e.target.value.trim()));
   Arcade.init();
