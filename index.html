@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>SETARA: Misi Sekolah Adil</title>
-  <meta name="description" content="Game interaktif tentang kesetaraan gender di sekolah — Pemira MPK & OSIS.">
+  <meta name="description" content="Game interaktif tentang kesetaraan gender di sekolah.">
   <meta property="og:title" content="SETARA: Misi Sekolah Adil">
   <meta property="og:description" content="Main game, lawan stereotip gender, wujudkan sekolah yang adil untuk semua!">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -20,14 +20,6 @@
   <main id="app">
     <!-- ============ LAYAR MENU ============ -->
     <section id="screen-menu" class="screen active">
-      <div class="campaign-badge">
-        <span class="badge-no" data-config="nomor">01</span>
-        <span>
-          <small>Pemira MPK &amp; OSIS</small>
-          <strong data-config="namaPaslon">Nama Paslon</strong>
-        </span>
-      </div>
-
       <div class="hero">
         <div class="hero-icons" aria-hidden="true">
           <span class="float f1">👩‍🎓</span>
@@ -134,18 +126,6 @@
         <h2 class="result-score"><span id="result-score">0</span><small>poin</small></h2>
         <p id="result-text"></p>
 
-        <div class="campaign-box">
-          <p class="campaign-small">Bersama kami, wujudkan sekolah yang setara!</p>
-          <div class="campaign-main">
-            <span class="badge-no big" data-config="nomor">01</span>
-            <div>
-              <strong data-config="namaPaslon">Nama Paslon</strong>
-              <em data-config="slogan">"Slogan"</em>
-            </div>
-          </div>
-          <ul class="program-list" id="program-list"></ul>
-        </div>
-
         <div class="result-actions">
           <button class="btn btn-primary" data-action="replay">🔁 Main Lagi</button>
           <button class="btn btn-secondary" data-action="share">📤 Bagikan</button>
@@ -163,7 +143,7 @@
           <button class="tab" data-board="arcade">Mode Arcade</button>
         </div>
         <ol class="board" id="board-list"></ol>
-        <p class="hint">Skor disimpan di perangkat ini.</p>
+        <p class="hint" id="board-hint">Skor disimpan di perangkat ini.</p>
         <button class="btn btn-ghost" data-action="menu">← Kembali</button>
       </div>
     </section>

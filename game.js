@@ -176,14 +176,6 @@
     if (id !== "arcade") Arcade.stop();
   }
 
-  function applyConfig() {
-    $$("[data-config]").forEach((el) => {
-      const v = CFG[el.dataset.config];
-      if (v) el.textContent = v;
-    });
-    $("#program-list").innerHTML = (CFG.program || []).map((p) => `<li>${escapeHTML(p)}</li>`).join("");
-  }
-
   function playerName() {
     const n = $("#player-name").value.trim();
     return n || "Anonim";
@@ -617,19 +609,53 @@
     board.push({ name: state.name, score: r.score, date: Date.now() });
     board.sort((a, b) => b.score - a.score);
     store.set(key, board.slice(0, 10));
+    submitGlobal(r.mode, state.name, r.score);
   }
 
-  function renderBoard(mode) {
+  /* ---- Papan skor global (Google Sheets + Apps Script) ---- */
+  const GLOBAL_URL = (CFG.LEADERBOARD_URL || "").trim();
+
+  function submitGlobal(mode, name, score) {
+    if (!GLOBAL_URL) return;
+    // text/plain menghindari CORS preflight yang tidak didukung Apps Script
+    fetch(GLOBAL_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ mode, name, score })
+    }).catch(() => { /* offline: skor lokal tetap tersimpan */ });
+  }
+
+  let boardReq = 0;
+  async function renderBoard(mode) {
     $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.board === mode));
-    const board = store.get("setara_board_" + mode, []);
-    $("#board-list").innerHTML = board.length
-      ? board.map((b) => `<li><span>${escapeHTML(b.name)}</span><b>${b.score}</b></li>`).join("")
-      : `<li class="empty">Belum ada skor. Ayo jadi yang pertama! 🚀</li>`;
+    const list = $("#board-list"), hint = $("#board-hint");
+    const draw = (board) => {
+      list.innerHTML = board.length
+        ? board.map((b) => `<li><span>${escapeHTML(b.name)}</span><b>${Number(b.score) || 0}</b></li>`).join("")
+        : `<li class="empty">Belum ada skor. Ayo jadi yang pertama! 🚀</li>`;
+    };
+    const local = () => { draw(store.get("setara_board_" + mode, [])); hint.textContent = "Skor disimpan di perangkat ini."; };
+
+    if (!GLOBAL_URL) return local();
+    const req = ++boardReq;
+    list.innerHTML = `<li class="empty">Memuat skor global… ⏳</li>`;
+    hint.textContent = "";
+    try {
+      const res = await fetch(GLOBAL_URL + (GLOBAL_URL.includes("?") ? "&" : "?") + "mode=" + mode);
+      const data = await res.json();
+      if (req !== boardReq) return; // tab sudah berganti
+      draw(Array.isArray(data) ? data : []);
+      hint.textContent = "🌍 Skor global dari semua pemain.";
+    } catch {
+      if (req !== boardReq) return;
+      local();
+      hint.textContent = "Gagal memuat skor global — menampilkan skor di perangkat ini.";
+    }
   }
 
   async function share() {
     const r = state.lastResult || { score: 0, rank: "" };
-    const text = `Aku dapat ${r.score} poin dan gelar "${r.rank}" di game SETARA! 🌈 Yuk lawan stereotip gender di sekolah. Pilih nomor ${CFG.nomor || ""} di Pemira!`;
+    const text = `Aku dapat ${r.score} poin dan gelar "${r.rank}" di game SETARA! 🌈 Yuk main dan lawan stereotip gender di sekolah!`;
     const url = location.href.split("#")[0];
     try {
       if (navigator.share) { await navigator.share({ title: "SETARA: Misi Sekolah Adil", text, url }); return; }
@@ -678,6 +704,5 @@
   $("#btn-sound").textContent = state.soundOn ? "🔊 Suara" : "🔇 Bisu";
   $("#player-name").value = store.get("setara_name", "");
   $("#player-name").addEventListener("input", (e) => store.set("setara_name", e.target.value.trim()));
-  applyConfig();
   Arcade.init();
 })();
