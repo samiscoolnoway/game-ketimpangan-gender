@@ -926,9 +926,11 @@
       this.items.push({
         type, label, w, h, fontSize,
         x, y: -h,
-        vy: rand(90, 140) * (0.85 + level * 0.18) * (type === "bad" ? 1.05 : type === "gold" ? 1.25 : 1) * (this.rush > 0 ? 1.45 : 1),
+        vy: 0, rushed: this.rush > 0,
         wob: rand(0, Math.PI * 2), vx: 0, sq: 0, kcd: 0
       });
+      const it = this.items[this.items.length - 1];
+      it.vy = it.baseVy = rand(90, 140) * (0.85 + level * 0.18) * (type === "bad" ? 1.05 : type === "gold" ? 1.25 : 1) * (it.rushed ? 1.45 : 1);
     },
 
     loop(t) {
@@ -971,6 +973,7 @@
       // item
       for (let i = this.items.length - 1; i >= 0; i--) {
         const it = this.items[i];
+        it.vy += (it.baseVy - it.vy) * Math.min(1, dt * 1.5); // pulih ke kecepatan asal setelah terhalang
         it.y += it.vy * dt;
         it.wob += dt * 3;
         it.x += it.vx * dt;
@@ -1081,36 +1084,64 @@
     },
     // Pesan yang saling bertabrakan tidak menumpuk: keduanya terpental.
     knockback() {
-      const its = this.items;
+      const its = this.items, p = this.player;
       for (let i = 0; i < its.length; i++) {
         for (let j = i + 1; j < its.length; j++) {
           const a = its[i], b = its[j];
+          if (a.type === "bad" && b.type === "bad" && this.unblockReds(a, b, p)) continue;
           const dx = this.wobX(a) - this.wobX(b), dy = a.y - b.y;
           const penX = (a.w + b.w) / 2 + 4 - Math.abs(dx), penY = (a.h + b.h) / 2 + 4 - Math.abs(dy);
           if (penX <= 0 || penY <= 0) continue;
           const dir = dx === 0 ? (Math.random() < .5 ? -1 : 1) : Math.sign(dx);
+          const fresh = a.kcd <= 0 && b.kcd <= 0;
+          let hard;
           if (penY < penX) {
-            // tabrakan atas-bawah: yang di atas terdorong naik dan ikut melambat
+            // tumpuk atas-bawah: yang di atas didorong naik dan menyamakan kecepatan
+            // (bukan dikali terus-menerus, yang dulu membuat semua pesan melambat)
             const up = a.y < b.y ? a : b, low = up === a ? b : a;
+            hard = up.vy - low.vy > 25;
             up.y -= penY;
-            up.vy = Math.min(up.vy, low.vy * 0.95);
+            if (up.vy > low.vy) up.vy = low.vy;
+            if (fresh) { a.vx += dir * 90; b.vx -= dir * 90; }
           } else {
+            hard = true;
             a.x += dir * penX / 2; b.x -= dir * penX / 2;
+            if (fresh) { a.vx = dir * Math.max(Math.abs(a.vx), 170); b.vx = -dir * Math.max(Math.abs(b.vx), 170); }
           }
-          const fresh = a.kcd <= 0 || b.kcd <= 0;
-          a.vx = dir * Math.max(Math.abs(a.vx), 170); b.vx = -dir * Math.max(Math.abs(b.vx), 170);
-          if (fresh) {
-            a.sq = b.sq = 1; a.kcd = b.kcd = 0.35;
-            const cx = (this.wobX(a) + this.wobX(b)) / 2, cy = (a.y + b.y) / 2;
-            this.impacts.push({ x: cx, y: cy, t: 0, word: Math.random() < .5 ? pick(["POW!", "BAM!", "DUAK!"]) : "" });
-            for (let k = 0; k < 10; k++) {
-              const ang = rand(0, Math.PI * 2), sp = rand(90, 220);
-              this.particles.push({ x: cx, y: cy, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 60, life: rand(.25, .5), c: pick(["#ffffff", "#fff3b0", "#9fd8ff"]), r: rand(1.5, 3.5) });
-            }
-            if (this.knockSfxT <= 0) { sfx.knock(); this.knockSfxT = 0.08; }
-          }
+          if (fresh && hard) this.knockFx(a, b);
+          if (fresh) a.kcd = b.kcd = 0.5;
         }
       }
+    },
+
+    // Dua gelembung merah yang sejajar tidak boleh menutup semua celah:
+    // kalau celah tersisa lebih sempit dari kotak pemain, yang di atas ditahan
+    // di belakang agar selalu ada jalan untuk menghindar.
+    unblockReds(a, b, p) {
+      const needDy = (a.h + b.h) / 2 + p.h + 18;
+      if (Math.abs(a.y - b.y) >= needDy) return false;
+      const ia = [this.wobX(a) - a.w / 2 - 6, this.wobX(a) + a.w / 2 + 6];
+      const ib = [this.wobX(b) - b.w / 2 - 6, this.wobX(b) + b.w / 2 + 6];
+      const [l, r] = ia[0] < ib[0] ? [ia, ib] : [ib, ia];
+      const gap = Math.max(l[0], r[0] - l[1], this.W - Math.max(l[1], r[1]));
+      if (gap >= p.w + 24) return false;
+      const up = a.y < b.y ? a : b, low = up === a ? b : a;
+      up.y = Math.min(up.y, low.y - needDy);
+      if (up.vy > low.vy) up.vy = low.vy;
+      return true;
+    },
+
+    knockFx(a, b) {
+      a.sq = b.sq = 1;
+      const cx = (this.wobX(a) + this.wobX(b)) / 2, cy = (a.y + b.y) / 2;
+      if (this.impacts.length < 8) this.impacts.push({ x: cx, y: cy, t: 0, word: Math.random() < .5 ? pick(["POW!", "BAM!", "DUAK!"]) : "" });
+      if (this.particles.length < 220) {
+        for (let k = 0; k < 10; k++) {
+          const ang = rand(0, Math.PI * 2), sp = rand(90, 220);
+          this.particles.push({ x: cx, y: cy, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 60, life: rand(.25, .5), c: pick(["#ffffff", "#fff3b0", "#9fd8ff"]), r: rand(1.5, 3.5) });
+        }
+      }
+      if (this.knockSfxT <= 0) { sfx.knock(); this.knockSfxT = 0.12; }
     },
 
     // pesan emas bergoyang lebih lebar agar lebih sulit ditangkap
@@ -1128,6 +1159,8 @@
     },
     endRush() {
       this.rush = 0;
+      // pesan yang muncul saat rush ikut melambat agar tidak menyeruduk pesan baru yang lebih lambat
+      this.items.forEach((it) => { if (it.rushed) { it.rushed = false; it.baseVy /= 1.45; it.vy = Math.min(it.vy, it.baseVy); } });
       $(".canvas-wrap").classList.remove("rush");
       Music.setRush(false);
       this.grace = 3; // waktu pulih: kebal 3 detik setelah Golden Rush
