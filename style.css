@@ -209,7 +209,7 @@ h1, h2, h3, .mode-title, .btn, .result-score { font-family: "Fredoka", "Nunito",
 .canvas-wrap {
   position: relative; border-radius: var(--radius); overflow: hidden;
   border: 1px solid var(--card-border); box-shadow: var(--shadow);
-  height: min(70vh, 620px); touch-action: none;
+  height: min(66vh, 600px); touch-action: none;
 }
 #arcade-canvas { display: block; width: 100%; height: 100%; }
 .arcade-overlay {
@@ -222,6 +222,50 @@ h1, h2, h3, .mode-title, .btn, .result-score { font-family: "Fredoka", "Nunito",
 .pill.good { background: rgba(46, 230, 197, .25); color: var(--teal); }
 .pill.bad { background: rgba(255, 92, 108, .25); color: #ff8f9b; }
 .pill.power { background: rgba(255, 210, 63, .25); color: var(--yellow); }
+.pill.gold { background: linear-gradient(90deg, #fff1a8, #e8a000); color: #3a1d00; }
+
+/* Golden Rush */
+.rush-meter {
+  display: flex; align-items: center; gap: 10px; margin: -4px 0 12px;
+  background: var(--card); border: 1px solid var(--card-border); border-radius: 999px; padding: 6px 12px;
+}
+.rush-label { font-weight: 800; font-size: .8rem; white-space: nowrap; color: var(--yellow); }
+.rush-count { font-family: "Fredoka"; font-size: .9rem; min-width: 2.4em; text-align: right; }
+.rush-track {
+  position: relative; flex: 1; height: 12px; border-radius: 999px; overflow: hidden;
+  background: rgba(0, 0, 0, .35);
+}
+.rush-fill {
+  height: 100%; width: 0; border-radius: inherit; transition: width .25s ease-out;
+  background: linear-gradient(90deg, #fff1a8, #ffd23f, #e8a000);
+  box-shadow: 0 0 10px rgba(255, 210, 63, .8);
+}
+/* sekat 4 bagian, seperti meteran Overdrive */
+.rush-track::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent calc(25% - 1px), rgba(0,0,0,.5) calc(25% - 1px), rgba(0,0,0,.5) 25%, transparent 25%,
+    transparent calc(50% - 1px), rgba(0,0,0,.5) calc(50% - 1px), rgba(0,0,0,.5) 50%, transparent 50%,
+    transparent calc(75% - 1px), rgba(0,0,0,.5) calc(75% - 1px), rgba(0,0,0,.5) 75%, transparent 75%);
+}
+.rush-meter.active { border-color: #ff8a00; animation: rush-pulse .5s ease-in-out infinite alternate; }
+.rush-meter.active .rush-label { color: #fff3b0; }
+.rush-meter.active .rush-fill { transition: width .1s linear; background: linear-gradient(90deg, #ff3d1f, #ff8a00, #ffd23f); }
+.rush-meter.active .rush-track::after { display: none; }
+@keyframes rush-pulse {
+  from { box-shadow: 0 0 8px rgba(255, 120, 0, .5); }
+  to { box-shadow: 0 0 22px rgba(255, 160, 0, .95); }
+}
+.canvas-wrap::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  box-shadow: inset 0 0 0 rgba(255, 110, 0, 0); transition: box-shadow .4s;
+}
+.canvas-wrap.rush { border-color: #ff8a00; }
+.canvas-wrap.rush::after { animation: rush-edge .35s ease-in-out infinite alternate; }
+@keyframes rush-edge {
+  from { box-shadow: inset 0 0 30px rgba(255, 90, 0, .6); }
+  to { box-shadow: inset 0 0 60px rgba(255, 170, 0, .9); }
+}
+
 .toast {
   position: absolute; top: 18px; left: 50%; transform: translate(-50%, -20px); opacity: 0;
   background: rgba(0, 0, 0, .55); padding: 8px 16px; border-radius: 999px; font-weight: 800;

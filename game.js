@@ -115,6 +115,13 @@
 
   /* ---------------- Data Arcade ---------------- */
   const SHIELD_LABEL = "🔒 Perisai";
+  // Pesan emas: nilai paling penting. Kumpulkan RUSH_NEED untuk memicu Golden Rush.
+  // (Hindari emoji ber-U+FE0F; lihat Arcade.centerText.)
+  const GOLD_ITEMS = [
+    "🌟 Setara Itu Hak Semua", "👑 Kamu Berhak Bermimpi", "🏆 Pendidikan Hak Setiap Anak",
+    "💎 Hargai Setiap Pilihan", "🌈 Siapa Pun Bisa Jadi Apa Pun", "🚀 Bakat Tak Kenal Gender"
+  ];
+  const RUSH_NEED = 4, RUSH_TIME = 8;
   const GOOD_ITEMS = [
     "⭐ Kesempatan Sama", "🤝 Saling Hormat", "🙋 Semua Boleh Memimpin", "📚 Pendidikan untuk Semua",
     "💬 Semua Suara Didengar", "⚽ Olahraga untuk Semua", "🎨 Hobi Tanpa Label", "🧹 Piket Bergilir",
@@ -166,6 +173,12 @@
     mid: () => beep(440, .15, "sine"),
     click: () => beep(800, .05, "square", .06),
     power: () => { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => beep(f, .12, "triangle"), i * 60)); },
+    gold: () => { [988, 1319, 1760].forEach((f, i) => setTimeout(() => beep(f, .14, "triangle", .13), i * 55)); },
+    rush: () => {
+      beep(180, .6, "sawtooth", .1, 900);
+      [523, 659, 784, 1046, 1318, 1568].forEach((f, i) => setTimeout(() => beep(f, .16, "square", .07), 250 + i * 70));
+    },
+    rushEnd: () => beep(700, .4, "triangle", .1, -400),
     win: () => { [523, 659, 784, 1046, 1318].forEach((f, i) => setTimeout(() => beep(f, .18, "triangle", .12), i * 110)); }
   };
 
@@ -304,6 +317,7 @@
     running: false, raf: 0, last: 0,
     player: null, items: [], particles: [], floaters: [], stars: [],
     score: 0, lives: 3, time: 60, combo: 1, streak: 0, spawnT: 0, elapsed: 0, shield: 0,
+    gold: 0, rush: 0, rushGlow: 0, rushFlash: 0, flames: [],
     keys: {},
 
     init() {
@@ -341,6 +355,8 @@
       this.items = []; this.particles = []; this.floaters = [];
       this.score = 0; this.lives = 3; this.time = 60; this.combo = 1; this.streak = 0;
       this.spawnT = 0; this.elapsed = 0; this.shield = 0;
+      this.gold = 0; this.rush = 0; this.rushGlow = 0; this.rushFlash = 0; this.flames = [];
+      $(".canvas-wrap").classList.remove("rush");
       this.updateHUD();
     },
     go() {
@@ -358,8 +374,10 @@
       const level = 1 + this.elapsed / 15;
       const r = Math.random();
       let type, label;
+      const badP = Math.min(0.32, 0.22 + this.elapsed / 300) * (this.rush > 0 ? 0.6 : 1);
       if (r < 0.06) { type = "power"; label = Math.random() < .5 ? SHIELD_LABEL : "⏰ +5 detik"; }
-      else if (r < 0.06 + Math.min(0.32, 0.22 + this.elapsed / 300)) { type = "bad"; label = pick(BAD_ITEMS); }
+      else if (r < 0.13) { type = "gold"; label = pick(GOLD_ITEMS); }
+      else if (r < 0.13 + badP) { type = "bad"; label = pick(BAD_ITEMS); }
       else { type = "good"; label = pick(GOOD_ITEMS); }
       const fontSize = this.W < 420 ? 13 : 15;
       this.ctx.font = `800 ${fontSize}px Nunito, sans-serif`;
@@ -375,7 +393,7 @@
       this.items.push({
         type, label, w, h, fontSize,
         x, y: -h,
-        vy: rand(90, 140) * (0.85 + level * 0.18) * (type === "bad" ? 1.05 : 1),
+        vy: rand(90, 140) * (0.85 + level * 0.18) * (type === "bad" ? 1.05 : type === "gold" ? 0.9 : 1) * (this.rush > 0 ? 1.45 : 1),
         wob: rand(0, Math.PI * 2)
       });
     },
@@ -393,6 +411,9 @@
       this.elapsed += dt;
       this.time -= dt;
       if (this.shield > 0) this.shield -= dt;
+      if (this.rush > 0) { this.rush -= dt; if (this.rush <= 0) this.endRush(); }
+      this.rushGlow += ((this.rush > 0 ? 1 : 0) - this.rushGlow) * Math.min(1, dt * 4);
+      if (this.rushFlash > 0) this.rushFlash = Math.max(0, this.rushFlash - dt * 1.2);
       if (this.time <= 0) { this.time = 0; return this.end("Waktu habis!"); }
 
       // gerak pemain
@@ -402,14 +423,14 @@
       if (this.keys.ArrowRight || this.keys.d) p.tx = p.x + spd * dt * 3;
       p.tx = Math.max(p.w / 2, Math.min(this.W - p.w / 2, p.tx));
       const prevX = p.x;
-      p.x += (p.tx - p.x) * Math.min(1, dt * 14);
+      p.x += (p.tx - p.x) * Math.min(1, dt * (this.rush > 0 ? 20 : 14));
       p.tilt = Math.max(-0.3, Math.min(0.3, (p.x - prevX) * 0.02));
 
       // spawn
       this.spawnT -= dt;
       if (this.spawnT <= 0) {
         this.spawn();
-        this.spawnT = Math.max(0.35, 0.95 - this.elapsed / 90);
+        this.spawnT = Math.max(0.35, 0.95 - this.elapsed / 90) * (this.rush > 0 ? 0.55 : 1);
       }
 
       // item
@@ -437,7 +458,18 @@
         f.y -= 50 * dt; f.life -= dt;
         if (f.life <= 0) this.floaters.splice(i, 1);
       }
-      this.stars.forEach((s) => { s.y += s.s * dt; if (s.y > this.H) { s.y = 0; s.x = rand(0, this.W); } });
+      // api Golden Rush: dari bawah layar dan dari kotak pemain
+      if (this.rush > 0) {
+        this.flames.push({ x: rand(0, this.W), y: this.H + 6, vx: rand(-15, 15), vy: rand(-170, -90), life: rand(.3, .7), max: .7, r: rand(4, 10) });
+        if (Math.random() < .6) this.flames.push({ x: p.x + rand(-p.w / 2, p.w / 2), y: p.y + p.h / 2, vx: rand(-20, 20), vy: rand(-120, -60), life: rand(.2, .4), max: .4, r: rand(3, 6) });
+      }
+      for (let i = this.flames.length - 1; i >= 0; i--) {
+        const f = this.flames[i];
+        f.x += f.vx * dt; f.y += f.vy * dt; f.life -= dt;
+        if (f.life <= 0) this.flames.splice(i, 1);
+      }
+      const starSpd = 1 + this.rushGlow * 5;
+      this.stars.forEach((s) => { s.y += s.s * starSpd * dt; if (s.y > this.H) { s.y = 0; s.x = rand(0, this.W); } });
       this.updateHUD();
     },
 
@@ -445,12 +477,24 @@
       if (it.type === "good") {
         this.streak++;
         this.combo = Math.min(5, 1 + Math.floor(this.streak / 4));
-        const pts = 10 * this.combo;
+        const pts = 10 * this.combo * (this.rush > 0 ? 2 : 1);
         this.score += pts;
         this.burst(x, it.y, ["#2ee6c5", "#ffd23f", "#ffffff"]);
         this.float(x, it.y, "+" + pts, "#2ee6c5");
         sfx.good();
         if (this.streak > 0 && this.streak % 4 === 0) toast(`🔥 Combo x${this.combo}!`);
+      } else if (it.type === "gold") {
+        this.streak++;
+        this.combo = Math.min(5, 1 + Math.floor(this.streak / 4));
+        const pts = 25 * this.combo * (this.rush > 0 ? 2 : 1);
+        this.score += pts;
+        this.burst(x, it.y, ["#ffd23f", "#fff3b0", "#ff9f1c", "#ffffff"]);
+        this.burst(x, it.y, ["#ffd23f", "#ffffff"]);
+        this.float(x, it.y, "+" + pts, "#ffd23f");
+        sfx.gold();
+        if (this.rush > 0) { this.rush = Math.min(RUSH_TIME + 4, this.rush + 2); toast("🔥 Rush +2 detik!"); }
+        else if (++this.gold >= RUSH_NEED) this.startRush();
+        else toast(`✨ Pesan Emas ${this.gold}/${RUSH_NEED}`);
       } else if (it.type === "bad") {
         if (this.shield > 0) {
           this.score += 5;
@@ -474,6 +518,21 @@
         this.burst(x, it.y, ["#ffd23f", "#9b5cff", "#ffffff"]);
       }
     },
+    startRush() {
+      this.gold = 0;
+      this.rush = RUSH_TIME;
+      this.rushFlash = 1;
+      this.shake = 0.25;
+      $(".canvas-wrap").classList.add("rush");
+      sfx.rush();
+      toast("🔥 GOLDEN RUSH! Skor x2");
+    },
+    endRush() {
+      this.rush = 0;
+      $(".canvas-wrap").classList.remove("rush");
+      sfx.rushEnd();
+      toast("Golden Rush selesai");
+    },
     burst(x, y, colors) {
       for (let i = 0; i < 18; i++) {
         const a = rand(0, Math.PI * 2), s = rand(80, 260);
@@ -486,7 +545,12 @@
       $("#arc-score").textContent = this.score;
       $("#arc-time").textContent = Math.ceil(this.time);
       $("#arc-lives").textContent = this.lives > 0 ? "❤️".repeat(this.lives) : "💔";
-      $("#arc-combo").textContent = "x" + this.combo;
+      $("#arc-combo").textContent = "x" + this.combo * (this.rush > 0 ? 2 : 1);
+      const meter = $("#rush-meter"), on = this.rush > 0;
+      meter.classList.toggle("active", on);
+      $("#rush-fill").style.width = (on ? Math.min(1, this.rush / RUSH_TIME) : this.gold / RUSH_NEED) * 100 + "%";
+      $("#rush-label").textContent = on ? "🔥 GOLDEN RUSH x2" : "✨ Golden Rush";
+      $("#rush-count").textContent = on ? Math.ceil(this.rush) + "s" : this.gold + "/" + RUSH_NEED;
     },
 
     roundRect(x, y, w, h, r) {
@@ -516,8 +580,20 @@
       const g = c.createLinearGradient(0, 0, 0, H);
       g.addColorStop(0, "#2a1258"); g.addColorStop(1, "#0f2a4a");
       c.fillStyle = g; c.fillRect(-10, -10, W + 20, H + 20);
-      c.fillStyle = "rgba(255,255,255,.6)";
-      this.stars.forEach((s) => { c.beginPath(); c.arc(s.x, s.y, s.r, 0, Math.PI * 2); c.fill(); });
+      const rg = this.rushGlow;
+      if (rg > 0.01) {
+        const fg = c.createLinearGradient(0, 0, 0, H);
+        fg.addColorStop(0, `rgba(120,20,10,${0.75 * rg})`); fg.addColorStop(0.6, `rgba(200,60,10,${0.6 * rg})`); fg.addColorStop(1, `rgba(255,150,20,${0.75 * rg})`);
+        c.fillStyle = fg; c.fillRect(-10, -10, W + 20, H + 20);
+      }
+      if (rg > 0.05) {
+        // bintang jadi garis kecepatan saat Golden Rush
+        c.strokeStyle = `rgba(255,220,150,${0.35 + 0.35 * rg})`; c.lineCap = "round";
+        this.stars.forEach((s) => { c.lineWidth = s.r; c.beginPath(); c.moveTo(s.x, s.y); c.lineTo(s.x, s.y - s.s * rg * 0.8); c.stroke(); });
+      } else {
+        c.fillStyle = "rgba(255,255,255,.6)";
+        this.stars.forEach((s) => { c.beginPath(); c.arc(s.x, s.y, s.r, 0, Math.PI * 2); c.fill(); });
+      }
 
       // gedung sekolah di bawah
       c.fillStyle = "rgba(255,255,255,.05)";
@@ -526,22 +602,39 @@
       // item
       this.items.forEach((it) => {
         const x = it.x + Math.sin(it.wob) * 6;
-        const colors = it.type === "good" ? ["#2ee6c5", "#1a9e8a"] : it.type === "bad" ? ["#ff5c6c", "#b3263a"] : ["#ffd23f", "#ff9f1c"];
-        c.shadowColor = colors[0]; c.shadowBlur = 16;
+        const colors = it.type === "good" ? ["#2ee6c5", "#1a9e8a"] : it.type === "bad" ? ["#ff5c6c", "#b3263a"]
+          : it.type === "gold" ? ["#fff1a8", "#e8a000"] : ["#ffd23f", "#ff9f1c"];
+        c.shadowColor = it.type === "gold" ? "#ffd23f" : colors[0];
+        c.shadowBlur = it.type === "gold" ? 22 + Math.sin(it.wob * 2) * 8 : 16;
         const gg = c.createLinearGradient(0, it.y - it.h / 2, 0, it.y + it.h / 2);
         gg.addColorStop(0, colors[0]); gg.addColorStop(1, colors[1]);
         c.fillStyle = gg;
         this.roundRect(x - it.w / 2, it.y - it.h / 2, it.w, it.h, it.h / 2);
         c.fill();
         c.shadowBlur = 0;
+        if (it.type === "gold") { // bingkai berkilau
+          c.strokeStyle = `rgba(255,255,255,${0.55 + Math.sin(it.wob * 2) * 0.35})`; c.lineWidth = 2;
+          this.roundRect(x - it.w / 2 + 1, it.y - it.h / 2 + 1, it.w - 2, it.h - 2, it.h / 2 - 1); c.stroke();
+        }
         if (it.type === "bad") { // ekor gelembung chat
           c.beginPath(); c.moveTo(x - 8, it.y + it.h / 2 - 1); c.lineTo(x - 16, it.y + it.h / 2 + 9); c.lineTo(x + 2, it.y + it.h / 2 - 1); c.fill();
         }
-        c.fillStyle = it.type === "power" ? "#3a1d00" : "#ffffff";
+        c.fillStyle = it.type === "power" || it.type === "gold" ? "#3a1d00" : "#ffffff";
         c.font = `800 ${it.fontSize}px Nunito, sans-serif`;
         c.textBaseline = "middle";
         this.centerText(it.label, x, it.y + 1);
       });
+
+      // api Golden Rush
+      if (this.flames.length) {
+        c.save(); c.globalCompositeOperation = "lighter";
+        this.flames.forEach((f) => {
+          const t = Math.max(0, f.life / f.max);
+          c.fillStyle = t > .6 ? `rgba(255,230,120,${t * .45})` : t > .3 ? `rgba(255,140,30,${t * .55})` : `rgba(230,50,20,${t * .7})`;
+          c.beginPath(); c.arc(f.x, f.y, f.r * (0.4 + t), 0, Math.PI * 2); c.fill();
+        });
+        c.restore();
+      }
 
       // pemain (kotak suara)
       const p = this.player;
@@ -553,8 +646,9 @@
           c.lineWidth = 4; c.beginPath(); c.ellipse(0, 0, p.w / 2 + 16, p.h / 2 + 22, 0, 0, Math.PI * 2); c.stroke();
         }
         const pg = c.createLinearGradient(-p.w / 2, 0, p.w / 2, 0);
-        pg.addColorStop(0, "#ff5fa2"); pg.addColorStop(1, "#9b5cff");
-        c.fillStyle = pg; c.shadowColor = "#ff5fa2"; c.shadowBlur = 20;
+        if (this.rush > 0) { pg.addColorStop(0, "#ffd23f"); pg.addColorStop(1, "#ff4d1f"); }
+        else { pg.addColorStop(0, "#ff5fa2"); pg.addColorStop(1, "#9b5cff"); }
+        c.fillStyle = pg; c.shadowColor = this.rush > 0 ? "#ff8a00" : "#ff5fa2"; c.shadowBlur = this.rush > 0 ? 32 : 20;
         this.roundRect(-p.w / 2, -p.h / 2, p.w, p.h, 10); c.fill();
         c.shadowBlur = 0;
         c.fillStyle = "rgba(0,0,0,.35)"; this.roundRect(-p.w / 4, -p.h / 2 + 4, p.w / 2, 5, 2); c.fill();
@@ -571,11 +665,23 @@
         c.font = "800 20px Fredoka, sans-serif"; this.centerText(f.text, f.x, f.y);
       });
       c.globalAlpha = 1;
+
+      // kilatan & judul saat Golden Rush dimulai
+      if (this.rushFlash > 0) {
+        const f = this.rushFlash;
+        c.fillStyle = `rgba(255,200,80,${Math.max(0, f - 0.6) * 1.2})`; c.fillRect(0, 0, W, H);
+        c.globalAlpha = Math.min(1, f * 2);
+        c.font = `800 ${Math.round(Math.min(44, W / 8) * (1 + (1 - f) * 0.3))}px Fredoka, sans-serif`;
+        c.textBaseline = "middle"; c.fillStyle = "#fff3b0"; c.shadowColor = "#ff6a00"; c.shadowBlur = 24;
+        this.centerText("GOLDEN RUSH!", W / 2, H * 0.4);
+        c.shadowBlur = 0; c.globalAlpha = 1;
+      }
       c.restore();
     },
 
     end(reason) {
       this.stop();
+      $(".canvas-wrap").classList.remove("rush");
       sfx.win();
       const s = this.score;
       let badge, rank, text;

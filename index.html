@@ -100,6 +100,11 @@
         <div class="stat"><small>Nyawa</small><b id="arc-lives">❤️❤️❤️</b></div>
         <div class="stat"><small>Combo</small><b id="arc-combo">x1</b></div>
       </header>
+      <div class="rush-meter" id="rush-meter" aria-label="Meteran Golden Rush">
+        <span class="rush-label" id="rush-label">✨ Golden Rush</span>
+        <div class="rush-track"><div class="rush-fill" id="rush-fill"></div></div>
+        <b class="rush-count" id="rush-count">0/4</b>
+      </div>
       <div class="canvas-wrap">
         <canvas id="arcade-canvas"></canvas>
         <div class="arcade-overlay" id="arcade-overlay">
@@ -109,6 +114,7 @@
               <div><span class="pill good">⭐ Kesempatan Sama</span> Tangkap! +poin</div>
               <div><span class="pill bad">💬 "Cewek gak bisa…"</span> Hindari! −nyawa</div>
               <div><span class="pill power">🔒 Perisai</span> Kebal 8 detik</div>
+              <div><span class="pill gold">🌟 Pesan Emas</span> Kumpulkan 4 untuk <b>Golden Rush</b>: skor x2, serba cepat!</div>
             </div>
             <p class="hint">Geser jari / mouse, atau pakai tombol ← → di keyboard.</p>
             <button class="btn btn-primary" data-action="arcade-go">Mulai!</button>
